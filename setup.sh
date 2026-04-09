@@ -8,8 +8,8 @@ export LC_ALL=C
 
 clear
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "                    🔥 PHONE GATEWAY CONTROLLER v3.0 🔥"
-echo "                         Non-Root | Shizuku | WiFi Remote"
+echo "                    🔥 PHONE GATEWAY CONTROLLER v3.1 🔥"
+echo "                      Hotspot Ready | Connection Logs"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
@@ -18,7 +18,7 @@ pkill -f "http-server" 2>/dev/null || true
 
 echo "[1/6] 📦 Installing system packages..."
 pkg update -y 2>&1 | grep -E "(Reading|Building|Get:|Unpacking)" || true
-pkg install -y nodejs git curl jq termux-api openssh nmap 2>&1 | grep -E "(Setting up|Unpacking)" || true
+pkg install -y nodejs git curl jq termux-api net-tools 2>&1 | grep -E "(Setting up|Unpacking)" || true
 echo "✓ Packages installed"
 echo ""
 
@@ -32,9 +32,6 @@ echo ""
 echo "[3/6] 📲 Setting up Shizuku integration..."
 termux-setup-storage 2>/dev/null || true
 sleep 1
-
-SHIZUKU_DIR="$HOME/storage/shared/Android/data/moe.shizuku.privileged.api/start_files"
-mkdir -p "$SHIZUKU_DIR" 2>/dev/null || true
 
 cat > ~/phonegate/shizuku_setup.sh << 'SHIZUKU_END'
 #!/data/data/com.termux/files/usr/bin/bash
@@ -56,7 +53,7 @@ SHIZUKU_END
 
 chmod +x ~/phonegate/shizuku_setup.sh
 bash ~/phonegate/shizuku_setup.sh
-echo "✓ Shizuku ready (remember to export files from Shizuku app)"
+echo "✓ Shizuku ready"
 echo ""
 
 echo "[4/6] 🎮 Creating phone controller..."
@@ -108,7 +105,7 @@ esac
 CONTROL_END
 
 chmod +x ~/phonegate/control.sh
-echo "✓ Controller created with 25+ commands"
+echo "✓ Controller created"
 echo ""
 
 echo "[5/6] 🚀 Creating gateway server..."
@@ -120,6 +117,8 @@ const { exec } = require('child_process');
 
 const PORT = process.env.PORT || 3000;
 const controlScript = path.join(__dirname, 'control.sh');
+const connections = new Map();
+let requestCount = 0;
 
 const mimeTypes = {
     '.html': 'text/html',
@@ -127,6 +126,31 @@ const mimeTypes = {
     '.js': 'text/javascript',
     '.json': 'application/json'
 };
+
+function getLocalIP() {
+    return new Promise((resolve) => {
+        exec("ip addr show wlan0 2>/dev/null | grep 'inet ' | awk '{print $2}' | cut -d/ -f1", (err1, ip1) => {
+            if (ip1 && ip1.trim()) return resolve(ip1.trim());
+            
+            exec("ip addr show ap0 2>/dev/null | grep 'inet ' | awk '{print $2}' | cut -d/ -f1", (err2, ip2) => {
+                if (ip2 && ip2.trim()) return resolve(ip2.trim());
+                
+                exec("ifconfig 2>/dev/null | grep -A 1 'wlan0\\|ap0' | grep 'inet ' | awk '{print $2}' | head -1", (err3, ip3) => {
+                    if (ip3 && ip3.trim()) return resolve(ip3.trim());
+                    
+                    exec("ip route get 1 2>/dev/null | grep -oP 'src \\K\\S+'", (err4, ip4) => {
+                        resolve(ip4 && ip4.trim() ? ip4.trim() : '192.168.43.1');
+                    });
+                });
+            });
+        });
+    });
+}
+
+function logConnection(ip, msg) {
+    const time = new Date().toLocaleTimeString();
+    console.log(`[${time}] ${ip} - ${msg}`);
+}
 
 function execCommand(cmd, args = '') {
     return new Promise((resolve) => {
@@ -138,9 +162,20 @@ function execCommand(cmd, args = '') {
 }
 
 const server = http.createServer(async (req, res) => {
+    const clientIP = req.headers['x-forwarded-for'] || req.connection.remoteAddress || 'unknown';
+    const cleanIP = clientIP.replace('::ffff:', '');
+    requestCount++;
+    
+    if (!connections.has(cleanIP)) {
+        connections.set(cleanIP, { firstSeen: new Date(), requests: 0 });
+        logConnection(cleanIP, '🟢 NEW CONNECTION');
+    }
+    connections.get(cleanIP).requests++;
+    
     const url = new URL(req.url, `http://${req.headers.host}`);
     
     if (url.pathname === '/api/status') {
+        logConnection(cleanIP, 'Status check');
         const battery = await execCommand('battery');
         const info = await execCommand('info');
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -153,6 +188,7 @@ const server = http.createServer(async (req, res) => {
         req.on('data', chunk => body += chunk);
         req.on('end', async () => {
             const { cmd, args } = JSON.parse(body);
+            logConnection(cleanIP, `⚡ Command: ${cmd} ${args || ''}`);
             const result = await execCommand(cmd, args);
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ result }));
@@ -189,20 +225,34 @@ const server = http.createServer(async (req, res) => {
     });
 });
 
-server.listen(PORT, '0.0.0.0', () => {
-    exec("ip route get 1 | grep -oP 'src \\K\\S+'", (err, ip) => {
-        const address = ip ? ip.trim() : 'localhost';
-        console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        console.log('🌐 Gateway Online');
-        console.log(`📱 Access URL: http://${address}:${PORT}`);
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
-        console.log('Enable hotspot and share URL with other devices!');
-        console.log('Press Ctrl+C to stop\n');
-    });
+server.listen(PORT, '0.0.0.0', async () => {
+    const ip = await getLocalIP();
+    console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('🔥 PHONE GATEWAY ONLINE');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log(`📱 Gateway URL: http://${ip}:${PORT}`);
+    console.log(`🌐 Port: ${PORT}`);
+    console.log(`📡 Listening on all interfaces (0.0.0.0)`);
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('\n💡 HOTSPOT SETUP:');
+    console.log('   1. Enable hotspot on this device');
+    console.log('   2. Connect other devices to hotspot');
+    console.log(`   3. Open: http://${ip}:${PORT}\n`);
+    console.log('📊 Waiting for connections...\n');
 });
+
+setInterval(() => {
+    if (connections.size > 0) {
+        console.log(`\n📊 Active connections: ${connections.size} | Total requests: ${requestCount}`);
+        connections.forEach((data, ip) => {
+            console.log(`   └─ ${ip}: ${data.requests} requests`);
+        });
+        console.log('');
+    }
+}, 30000);
 SERVER_END
 
-echo "✓ Server created (Node.js HTTP)"
+echo "✓ Server created with connection logging"
 echo ""
 
 echo "[6/6] 🎨 Creating web interface..."
@@ -334,6 +384,8 @@ cat > ~/phonegate/web/index.html << 'HTML_END'
             from { transform: translateX(100%); }
             to { transform: translateX(0); }
         }
+        .online { color: #00ff00; }
+        .offline { color: #ff4444; }
     </style>
 </head>
 <body>
@@ -346,7 +398,7 @@ cat > ~/phonegate/web/index.html << 'HTML_END'
         <div class="status">
             <div class="status-card">
                 <h3>Status</h3>
-                <p id="status">Connecting...</p>
+                <p id="status" class="online">Online</p>
             </div>
             <div class="status-card">
                 <h3>Device</h3>
@@ -430,6 +482,8 @@ cat > ~/phonegate/web/index.html << 'HTML_END'
                 showToast(`✓ ${cmd}`);
             } catch (e) {
                 log(`Error: ${e.message}`);
+                document.getElementById('status').textContent = 'Offline';
+                document.getElementById('status').className = 'offline';
             }
         }
         
@@ -461,12 +515,14 @@ cat > ~/phonegate/web/index.html << 'HTML_END'
             try {
                 const res = await fetch('/api/status');
                 const data = await res.json();
-                document.getElementById('status').textContent = data.status;
+                document.getElementById('status').textContent = 'Online';
+                document.getElementById('status').className = 'online';
                 document.getElementById('device').textContent = data.info.split('\n')[0];
                 const level = data.battery.match(/level: (\d+)/);
                 document.getElementById('battery').textContent = level ? level[1] + '%' : '--';
             } catch (e) {
                 document.getElementById('status').textContent = 'Offline';
+                document.getElementById('status').className = 'offline';
             }
         }
         
@@ -483,11 +539,34 @@ echo ""
 cat > ~/phonegate/start.sh << 'START_END'
 #!/data/data/com.termux/files/usr/bin/bash
 cd ~/phonegate
-IP=$(ip route get 1 2>/dev/null | grep -oP 'src \K\S+' || echo "unknown")
+
 echo ""
-echo "🚀 Starting Phone Gateway..."
-echo "📱 Access URL: http://${IP}:3000"
+echo "🔍 Detecting network configuration..."
+
+IP=$(ip addr show wlan0 2>/dev/null | grep 'inet ' | awk '{print $2}' | cut -d/ -f1)
+if [ -z "$IP" ]; then
+    IP=$(ip addr show ap0 2>/dev/null | grep 'inet ' | awk '{print $2}' | cut -d/ -f1)
+fi
+if [ -z "$IP" ]; then
+    IP=$(ifconfig 2>/dev/null | grep -A 1 'wlan0\|ap0' | grep 'inet ' | awk '{print $2}')
+fi
+if [ -z "$IP" ]; then
+    IP="192.168.43.1"
+    echo "⚠️  Could not detect IP, using default hotspot IP"
+fi
+
+echo "✓ Detected IP: $IP"
 echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "🔥 GATEWAY URL:"
+echo ""
+echo "   http://${IP}:3000"
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+echo "📱 Share this URL with devices on your hotspot/WiFi"
+echo ""
+
 node server.js
 START_END
 
@@ -503,7 +582,6 @@ echo "1. Export Shizuku files:"
 echo "   • Open Shizuku app"
 echo "   • Tap 'Use Shizuku in terminal apps'"
 echo "   • Tap 'Export files'"
-echo "   • The rish_shizuku.dex will be copied to ~/rish_shizuku.dex"
 echo ""
 echo "2. Start the gateway:"
 echo "   cd ~/phonegate"
@@ -511,15 +589,13 @@ echo "   ./start.sh"
 echo ""
 echo "3. Connect from other devices:"
 echo "   • Enable hotspot on this phone"
-echo "   • Connect other devices to the hotspot"
-echo "   • Open browser and go to the URL shown"
-echo "   • No password needed - direct access!"
+echo "   • Connect other devices to hotspot"
+echo "   • Open the URL shown in browser"
 echo ""
-echo "4. Features:"
-echo "   ✓ 25+ Phone control commands"
-echo "   ✓ WiFi/Hotspot remote access"
-echo "   ✓ Clean web interface"
-echo "   ✓ Real-time status"
-echo "   ✓ No authentication required"
+echo "✅ Features:"
+echo "   • Real IP detection (no localhost!)"
+echo "   • Connection logging"
+echo "   • Shows active clients"
+echo "   • Works on hotspot & WiFi"
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
