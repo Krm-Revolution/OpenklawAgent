@@ -1,133 +1,284 @@
-# 🤖 OpenClaw Termux No Root
+```markdown
+# 🔥 Phone Gateway Controller v2.0
 
-**Control any Android phone via Telegram using Gemini AI — no root required.**
+**Full Android device control via web interface — no root, no Telegram, pure freedom.**
 
-Powered by [OpenClaw](https://github.com/AidanPark/openclaw-android) + Shizuku + Termux
-
----
-
-### 📺 Watch the Full Setup Tutorial
-
-<a href="https://youtu.be/QePlp8CJ-qA" target="_blank">
-  <img src="https://markdown-videos-api.jorgenkh.no/youtube/QePlp8CJ-qA" alt="Watch the OpenClaw Setup Tutorial on YouTube" width="100%" />
-</a>
+Powered by Shizuku + Termux + Pollinations AI
 
 ---
 
 ## ✨ Features
 
-- 💬 **Telegram Bot** — Send commands from anywhere
-- 🧠 **Gemini AI** — Understands natural language
-- 📱 **30+ Commands** — WiFi, Bluetooth, calls, SMS, screenshots, volume & more
-- 🔒 **No Root** — Uses Shizuku for ADB-level access
-- ⚡ **1-Click Install** — Single script sets up everything
+- 🌐 **Web Gateway Interface** — Control from any device on same network
+- 🧠 **Pollinations AI** — Unlimited free AI chat
+- 🔍 **Free Web Search** — No API keys required
+- 📱 **50+ Commands** — Complete phone control + troll tools
+- 🔒 **No Root Required** — Uses Shizuku for system-level access
+- 🔑 **Auto-generated Access Key** — Secure by default
+- ⚡ **One-Command Install** — Everything sets up automatically
 
 ---
 
-## 📋 Prerequisites
+## 📋 Requirements
 
 | Requirement | Details |
 |---|---|
-| **Android Phone** | Android 11+ |
-| **Shizuku** | [F-Droid](https://f-droid.org/packages/moe.shizuku.privileged.api/) or [Play Store](https://play.google.com/store/apps/details?id=moe.shizuku.privileged.api) |
-| **Termux** | [F-Droid](https://f-droid.org/en/packages/com.termux/) ⚠️ *Don't use the Play Store version* |
-| **Telegram Bot Token** | Get from [@BotFather](https://t.me/BotFather) |
-| **Gemini API Key** | Free from [Google AI Studio](https://aistudio.google.com/apikey) |
+| **Android Version** | Android 11+ |
+| **Shizuku** | [Download from F-Droid](https://f-droid.org/packages/moe.shizuku.privileged.api/) |
+| **Termux** | [Download from F-Droid](https://f-droid.org/en/packages/com.termux/) |
+| **Network** | WiFi or mobile data for AI/search features |
+
+⚠️ **Important:** Do NOT use Termux from Play Store — it's outdated and broken.
 
 ---
 
-## 🏁 Setup
+## 🚀 Quick Install
 
-### Step 1 — Prepare Your Phone
-
-1. Go to `Settings → About Phone` → tap **"Build Number"** 7 times to enable Developer Options.
-2. Go to `Settings → Developer Options` → turn on **Wireless Debugging**.
-3. Install **Termux** from [F-Droid](https://f-droid.org/en/packages/com.termux/).
-4. Install **Shizuku** from [F-Droid](https://f-droid.org/packages/moe.shizuku.privileged.api/) or Play Store.
-
-### Step 2 — Start Shizuku & Export Files
-
-1. Open **Shizuku** → tap **"Pairing"** under Wireless Debugging.
-2. In Wireless Debugging settings, tap **"Pair device with pairing code"** and enter the code.
-3. Tap **"Start"** until it says **"Shizuku is running"**.
-4. Tap **"Use Shizuku in terminal apps"** → **"Export files"**.
-5. Create a folder named **`Shizuku`** in your internal storage and save files there.
-
-> **⚠️ Important:** The folder must be named exactly `Shizuku` (capital S) in your main storage.
-
-### Step 3 — Run the Installer
-
-Open **Termux** and paste:
-
-```bash
-curl -sL https://raw.githubusercontent.com/krm-revolution/OpenKlawAgent/main/setup.sh | bash
+### Step 1 — Enable Developer Options
+```
+Settings → About Phone → Tap "Build Number" 7 times
+Settings → System → Developer Options → Enable "Wireless Debugging"
 ```
 
-### Step 4 — Add Your Credentials
+### Step 2 — Setup Shizuku
+1. Open Shizuku app
+2. Tap "Pairing" under Wireless Debugging
+3. In phone settings, go to Developer Options → Wireless Debugging → "Pair device with pairing code"
+4. Enter the 6-digit code shown in Shizuku
+5. Tap "Start" in Shizuku until status shows "Shizuku is running"
+6. Tap "Use Shizuku in terminal apps"
+7. Tap "Export files"
+8. Create folder named exactly `Shizuku` in internal storage
+9. Select this folder and confirm
 
+### Step 3 — Run Installer
+Open Termux and paste this single command:
 ```bash
-openclaw onboard
-openclaw auth add google --key "YOUR_GEMINI_KEY_HERE"
+curl -sL https://raw.githubusercontent.com/YOUR_REPO/install.sh | bash
 ```
 
-### Step 5 — Launch! 🎉
+The installer will:
+- Update Termux packages
+- Install Node.js and dependencies
+- Configure Shizuku integration
+- Create web gateway interface
+- Generate secure access key
 
+### Step 4 — Start Gateway
 ```bash
-openclaw gateway
+cd ~/phonegate
+./start.sh
 ```
 
-Now open **Telegram**, find your bot, and try:
-- `"What's my battery?"`
-- `"Open Chrome"`
-- `"Search YouTube for lofi beats"`
-- `"Turn off WiFi"`
+You'll see:
+```
+🌐 Gateway running on port 3000
+🔑 Access key: [your-auto-generated-key]
+📱 Connect via: http://192.168.x.x:3000
+```
+
+### Step 5 — Connect & Control
+1. Enable hotspot on your phone (optional)
+2. Connect other devices to same network
+3. Open browser on any device
+4. Enter the IP address shown in terminal
+5. Input the access key when prompted
+6. Start controlling!
 
 ---
 
-## 📱 Commands
+## 📱 Command Reference
 
-| Command | What it does |
+### Basic Controls
+| Command | Description |
 |---|---|
-| `battery` | Check battery level |
-| `wifi on/off` | Toggle WiFi |
-| `bluetooth on/off` | Toggle Bluetooth |
-| `brightness 0-255` | Set brightness |
-| `volume-up / volume-down` | Adjust volume |
+| `tap X Y` | Tap at coordinates |
+| `longtap X Y` | Long press at coordinates |
+| `doubletap X Y` | Double tap |
+| `swipe X1 Y1 X2 Y2` | Swipe gesture |
+| `scrollup/down/left/right` | Directional scrolling |
+| `text "content"` | Type text |
+| `key CODE` | Press key (3=Home, 4=Back, 26=Power) |
+
+### System Controls
+| Command | Description |
+|---|---|
+| `home` | Go to home screen |
+| `back` | Press back button |
+| `recent` | Show recent apps |
+| `power` | Power button |
+| `volume_up/down` | Adjust volume |
 | `mute` | Toggle mute |
-| `lock` | Lock screen |
-| `screenshot` | Take a screenshot |
-| `open-app <package>` | Launch any app |
-| `kill-app <package>` | Force-stop an app |
-| `list-apps` | List installed apps |
-| `open-url <url>` | Open URL in browser |
-| `youtube-search <query>` | Search YouTube |
-| `call <number>` | Make a call |
-| `send-sms <number> <msg>` | Compose SMS |
-| `whatsapp-send <number> <msg>` | Send WhatsApp message |
-| `info` | Device model & Android version |
+| `playpause` | Media play/pause |
+| `next/prev` | Next/previous track |
+| `screenshot` | Take screenshot |
+
+### Network & Connectivity
+| Command | Description |
+|---|---|
+| `wifi_on/off` | Toggle WiFi |
+| `bluetooth_on/off` | Toggle Bluetooth |
+| `airplane_on/off` | Toggle airplane mode |
+| `hotspot_on/off` | Toggle mobile hotspot |
+| `location_on/off` | Toggle GPS location |
+
+### Apps & Media
+| Command | Description |
+|---|---|
+| `open_app PACKAGE` | Launch any app |
+| `open_url URL` | Open website |
+| `youtube QUERY` | Search YouTube |
+| `google QUERY` | Google search |
+| `maps LOCATION` | Open Maps |
+| `call NUMBER` | Make phone call |
+| `sms NUMBER "MSG"` | Send SMS |
+
+### Device Info
+| Command | Description |
+|---|---|
+| `battery` | Battery status & level |
+| `device_info` | Model & Android version |
+| `storage_info` | Storage usage |
+| `ram_info` | RAM statistics |
+| `cpu_info` | CPU information |
+| `network_info` | Network status |
+| `ip_info` | IP address |
+| `app_list` | List all installed apps |
+| `app_info PACKAGE` | App details |
+| `app_force_stop PACKAGE` | Force stop app |
+| `app_clear_data PACKAGE` | Clear app data |
+| `app_uninstall PACKAGE` | Uninstall app |
+
+### Display & UI
+| Command | Description |
+|---|---|
+| `brightness 0-255` | Set screen brightness |
+| `brightness_auto 0/1` | Auto brightness |
+| `rotatescreen 0/1` | Auto-rotate |
+| `lockscreen` | Lock device |
+| `screenon/off` | Control screen |
+| `flashlight_on/off` | Toggle flashlight |
+| `ui_dump` | Get all clickable UI elements |
+| `ui_click "Text"` | Click element by text |
+
+### Advanced
+| Command | Description |
+|---|---|
+| `clipboard_get` | Get clipboard content |
+| `clipboard_set "text"` | Set clipboard |
+| `notify "Title" "Msg"` | Send notification |
+| `toast "message"` | Show toast message |
+| `vibrate MILLISECONDS` | Vibrate device |
+| `ringermode 0/1/2` | Silent/Vibrate/Normal |
+| `shell "command"` | Run any shell command |
+| `reboot` | Reboot device |
+| `poweroff` | Power off |
+
+### Troll Tools 😈
+| Command | Description |
+|---|---|
+| `troll_screen_flip` | Crazy animations |
+| `troll_screen_normal` | Restore normal |
+| `troll_invert_colors 0/1` | Invert display |
+| `troll_font_huge` | Massive text size |
+| `troll_font_normal` | Normal text size |
+| `troll_spam_notify` | 10 spam notifications |
+| `troll_vibrate_crazy` | Long vibration |
+| `troll_open_random` | Launch random app |
+| `troll_rotate 0-3` | Force rotation |
+| `troll_volume_max` | Max volume blast |
+| `troll_brightness_flash` | Strobe effect |
 
 ---
 
 ## 🔧 Troubleshooting
 
-| Problem | Solution |
+| Issue | Solution |
 |---|---|
-| `rish: command not found` | Re-run `bash ~/storage/shared/Shizuku/copy.sh` |
-| Shizuku not responding | Open Shizuku app → ensure it says "Running" → run `shizuku` in Termux |
-| Network errors | Run `export NODE_OPTIONS=--dns-result-order=ipv4first` |
-| `rish_shizuku.dex` not found | In Shizuku → "Use in terminal apps" → "Export files" → save to `Shizuku` folder |
+| "rish: command not found" | Run: `bash ~/storage/shared/Shizuku/copy.sh` |
+| Shizuku not responding | Open Shizuku app → verify "Running" status → run `shizuku` in Termux |
+| Can't connect to gateway | Check IP address: `ifconfig wlan0` or `ip route` |
+| "Invalid access key" | Check terminal for correct key, clear browser cache |
+| AI not responding | Ensure internet connection is active |
+| Web search fails | Check internet, DuckDuckGo API may have rate limits |
+| Commands not executing | Run `rish -c whoami` to test Shizuku connection |
+
+---
+
+## 🔒 Security Notes
+
+- Access key is auto-generated on first run
+- Key stored locally in `~/phonegate/data/gateway.db`
+- Gateway only accessible on local network by default
+- For remote access, use VPN or SSH tunneling
+- Change key by editing database: `sqlite3 ~/phonegate/data/gateway.db "UPDATE settings SET value='new-key' WHERE key='access_key'"`
+
+---
+
+## 📂 File Structure
+
+```
+~/phonegate/
+├── gateway.js          # Main server
+├── phone_control.sh    # Command executor
+├── start.sh           # Launcher script
+├── web/
+│   └── index.html     # Web interface
+├── data/
+│   └── gateway.db     # SQLite database
+├── logs/              # Server logs
+├── uploads/           # File uploads
+└── temp/              # Temporary files
+```
+
+---
+
+## 🎯 Usage Examples
+
+### AI Chat Examples
+- "What's my battery level?"
+- "Open Chrome and search for weather"
+- "Take a screenshot and tell me what's on screen"
+- "Turn off WiFi and enable Bluetooth"
+- "Send a WhatsApp message to Mom saying I'll be late"
+
+### Web Search
+- Type any query in search box
+- AI automatically uses search when needed
+- Results appear directly in chat
+
+### Custom Commands
+- Type any command directly: `wifi_off`
+- Combine with arguments: `tap 500 1000`
+- Use shell commands: `shell ls /sdcard`
 
 ---
 
 ## 🙏 Credits
 
-- **[OpenClaw Android](https://github.com/AidanPark/openclaw-android)** by [AidanPark](https://github.com/AidanPark) — The AI gateway that powers this project.
-- **[Shizuku](https://github.com/RikkaApps/Shizuku)** — ADB-level access without root.
-- **[Termux](https://github.com/termux/termux-app)** — Linux terminal for Android.
-- **[Google Gemini](https://ai.google.dev/)** — AI brain for natural language understanding.
+- **Shizuku** — System-level Android access without root
+- **Termux** — Linux environment for Android
+- **Pollinations AI** — Free unlimited AI chat
+- **DuckDuckGo API** — Free web search
+- **Node.js** — Backend runtime
 
 ---
 
 ## 📄 License
 
-MIT License — see [LICENSE](LICENSE) for details.
+MIT License — Free for personal and commercial use.
+
+---
+
+## 🌟 Pro Tips
+
+1. **Bookmark the gateway URL** on other devices for quick access
+2. **Use Termux:Boot** to auto-start gateway on phone boot
+3. **Enable "Keep screen on"** in Termux for uninterrupted service
+4. **Create command shortcuts** in web UI by modifying HTML
+5. **Check logs** at `~/phonegate/logs/` if issues occur
+
+---
+
+**Made with ❤️ for the Android community**
+```
