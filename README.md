@@ -54,7 +54,7 @@ Settings → System → Developer Options → Enable "Wireless Debugging"
 ### Step 3 — Run Installer
 Open Termux and paste this single command:
 ```bash
-curl -sL https://raw.githubusercontent.com/YOUR_REPO/install.sh | bash
+curl -sL https://raw.githubusercontent.com/OpenKlaw/main/install.sh | bash
 ```
 
 The installer will:
