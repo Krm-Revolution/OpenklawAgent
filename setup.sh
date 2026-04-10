@@ -73,7 +73,7 @@ SHIZUKU_EOF
 fi
 
 SYSTEM_DIR="$HOME/phone_control_system"
-mkdir -p "$SYSTEM_DIR"/{scripts,server,logs}
+mkdir -p "$SYSTEM_DIR"/{scripts,server,logs,temp}
 cd "$SYSTEM_DIR"
 
 cat > scripts/phone_control.sh << 'EOF'
@@ -95,61 +95,76 @@ CMD="$1"
 shift 2>/dev/null || true
 
 case "$CMD" in
-    screenshot)      run_cmd "screencap -p '${1:-/sdcard/screenshot.png}'" ;;
-    open-app)        run_cmd "monkey -p $1 1" ;;
-    youtube-search)  QUERY=$(echo "$*" | sed 's/ /+/g'); run_cmd "am start -a android.intent.action.VIEW -d 'https://www.youtube.com/results?search_query=$QUERY'" ;;
-    open-url)        run_cmd "am start -a android.intent.action.VIEW -d '$1'" ;;
-    wifi)            if [ "$1" = "on" ]; then run_cmd "svc wifi enable"; else run_cmd "svc wifi disable"; fi ;;
-    hotspot)         if [ "$1" = "on" ]; then run_cmd "svc wifi disable; cmd wifi start-softap"; else run_cmd "cmd wifi stop-softap"; fi ;;
-    bluetooth)       if [ "$1" = "on" ]; then run_cmd "svc bluetooth enable"; else run_cmd "svc bluetooth disable"; fi ;;
-    nfc)             if [ "$1" = "on" ]; then run_cmd "svc nfc enable"; else run_cmd "svc nfc disable"; fi ;;
-    airplane)        if [ "$1" = "on" ]; then run_cmd "settings put global airplane_mode_on 1; am broadcast -a android.intent.action.AIRPLANE_MODE"; else run_cmd "settings put global airplane_mode_on 0; am broadcast -a android.intent.action.AIRPLANE_MODE"; fi ;;
-    mobile-data)     if [ "$1" = "on" ]; then run_cmd "svc data enable"; else run_cmd "svc data disable"; fi ;;
-    location)        if [ "$1" = "on" ]; then run_cmd "settings put secure location_mode 3"; else run_cmd "settings put secure location_mode 0"; fi ;;
-    battery)         run_cmd "dumpsys battery" | grep -E "level|temperature|voltage|status" ;;
-    battery-saver)   if [ "$1" = "on" ]; then run_cmd "settings put global low_power 1"; else run_cmd "settings put global low_power 0"; fi ;;
-    brightness)      run_cmd "settings put system screen_brightness $1" ;;
-    volume)          run_cmd "media volume --stream $1 --set $2" ;;
-    tap)             run_cmd "input tap $1 $2" ;;
-    swipe)           run_cmd "input swipe $1 $2 $3 $4 ${5:-500}" ;;
-    text)            run_cmd "input text '$*'" ;;
-    key)             run_cmd "input keyevent $1" ;;
-    home)            run_cmd "input keyevent 3" ;;
-    back)            run_cmd "input keyevent 4" ;;
-    recent)          run_cmd "input keyevent 187" ;;
-    power)           run_cmd "input keyevent 26" ;;
-    menu)            run_cmd "input keyevent 82" ;;
-    volume-up)       run_cmd "input keyevent 24" ;;
-    volume-down)     run_cmd "input keyevent 25" ;;
-    mute)            run_cmd "input keyevent 164" ;;
-    play-pause)      run_cmd "input keyevent 85" ;;
-    next)            run_cmd "input keyevent 87" ;;
-    previous)        run_cmd "input keyevent 88" ;;
-    screen-on)       run_cmd "input keyevent 224" ;;
-    screen-off)      run_cmd "input keyevent 223" ;;
-    camera)          run_cmd "input keyevent 27" ;;
-    notification)    run_cmd "cmd statusbar expand-notifications" ;;
-    quick-settings)  run_cmd "cmd statusbar expand-settings" ;;
-    sleep)           run_cmd "input keyevent 26" ;;
-    wake)            run_cmd "input keyevent 224; input keyevent 82" ;;
-    reboot)          run_cmd "reboot" ;;
-    lock)            run_cmd "am start -a android.app.action.SET_NEW_PASSWORD" ;;
-    device-info)     run_cmd "getprop ro.product.model; getprop ro.build.version.release; getprop ro.product.manufacturer" ;;
-    memory)          run_cmd "dumpsys meminfo" | grep -E "Total RAM|Free RAM" ;;
-    storage)         run_cmd "df -h /data" ;;
-    processes)       run_cmd "ps -A | head -30" ;;
-    kill-app)        run_cmd "am force-stop $1" ;;
-    uninstall-app)   run_cmd "pm uninstall $1" ;;
-    list-apps)       run_cmd "pm list packages -3 | cut -d: -f2" ;;
-    pattern-lock)    run_cmd "input keyevent 26; input keyevent 82; input swipe 200 800 600 800 100; input swipe 600 800 600 1200 100; input swipe 600 1200 200 1200 100; input swipe 200 1200 200 1600 100" ;;
-    pin-unlock)      run_cmd "input text '$1'; input keyevent 66" ;;
+    screenshot) run_cmd "screencap -p '${1:-/sdcard/screenshot.png}'" ;;
+    open-app) run_cmd "monkey -p $1 -c android.intent.category.LAUNCHER 1" ;;
+    youtube-search) 
+        QUERY=$(echo "$*" | sed 's/ /+/g')
+        run_cmd "am start -a android.intent.action.VIEW -d 'vnd.youtube://results?search_query=$QUERY'"
+        sleep 2
+        run_cmd "input keyevent 20"
+        sleep 0.5
+        run_cmd "input keyevent 20"
+        sleep 0.5
+        run_cmd "input keyevent 23"
+        ;;
+    youtube-play)
+        run_cmd "am start -a android.intent.action.VIEW -d 'vnd.youtube://watch?v=$1'"
+        ;;
+    open-url) run_cmd "am start -a android.intent.action.VIEW -d '$1'" ;;
+    wifi) if [ "$1" = "on" ]; then run_cmd "svc wifi enable"; else run_cmd "svc wifi disable"; fi ;;
+    hotspot) if [ "$1" = "on" ]; then run_cmd "svc wifi disable; cmd wifi start-softap"; else run_cmd "cmd wifi stop-softap"; fi ;;
+    bluetooth) if [ "$1" = "on" ]; then run_cmd "svc bluetooth enable"; else run_cmd "svc bluetooth disable"; fi ;;
+    nfc) if [ "$1" = "on" ]; then run_cmd "svc nfc enable"; else run_cmd "svc nfc disable"; fi ;;
+    airplane) if [ "$1" = "on" ]; then run_cmd "settings put global airplane_mode_on 1; am broadcast -a android.intent.action.AIRPLANE_MODE"; else run_cmd "settings put global airplane_mode_on 0; am broadcast -a android.intent.action.AIRPLANE_MODE"; fi ;;
+    mobile-data) if [ "$1" = "on" ]; then run_cmd "svc data enable"; else run_cmd "svc data disable"; fi ;;
+    location) if [ "$1" = "on" ]; then run_cmd "settings put secure location_mode 3"; else run_cmd "settings put secure location_mode 0"; fi ;;
+    battery) run_cmd "dumpsys battery" | grep -E "level|temperature|voltage|status" ;;
+    battery-saver) if [ "$1" = "on" ]; then run_cmd "settings put global low_power 1"; else run_cmd "settings put global low_power 0"; fi ;;
+    brightness) run_cmd "settings put system screen_brightness $1" ;;
+    volume) run_cmd "media volume --stream $1 --set $2" ;;
+    tap) run_cmd "input tap $1 $2" ;;
+    swipe) run_cmd "input swipe $1 $2 $3 $4 ${5:-500}" ;;
+    text) 
+        TEXT=$(echo "$*" | sed 's/"/\\"/g')
+        run_cmd "input text '$TEXT'"
+        ;;
+    key) run_cmd "input keyevent $1" ;;
+    home) run_cmd "input keyevent 3" ;;
+    back) run_cmd "input keyevent 4" ;;
+    recent) run_cmd "input keyevent 187" ;;
+    power) run_cmd "input keyevent 26" ;;
+    menu) run_cmd "input keyevent 82" ;;
+    volume-up) run_cmd "input keyevent 24" ;;
+    volume-down) run_cmd "input keyevent 25" ;;
+    mute) run_cmd "input keyevent 164" ;;
+    play-pause) run_cmd "input keyevent 85" ;;
+    next) run_cmd "input keyevent 87" ;;
+    previous) run_cmd "input keyevent 88" ;;
+    screen-on) run_cmd "input keyevent 224" ;;
+    screen-off) run_cmd "input keyevent 223" ;;
+    camera) run_cmd "input keyevent 27" ;;
+    notification) run_cmd "cmd statusbar expand-notifications" ;;
+    quick-settings) run_cmd "cmd statusbar expand-settings" ;;
+    sleep) run_cmd "input keyevent 26" ;;
+    wake) run_cmd "input keyevent 224; input keyevent 82" ;;
+    reboot) run_cmd "reboot" ;;
+    lock) run_cmd "am start -a android.app.action.SET_NEW_PASSWORD" ;;
+    device-info) run_cmd "getprop ro.product.model; getprop ro.build.version.release; getprop ro.product.manufacturer" ;;
+    memory) run_cmd "dumpsys meminfo" | grep -E "Total RAM|Free RAM" ;;
+    storage) run_cmd "df -h /data" ;;
+    processes) run_cmd "ps -A | head -30" ;;
+    kill-app) run_cmd "am force-stop $1" ;;
+    uninstall-app) run_cmd "pm uninstall $1" ;;
+    list-apps) run_cmd "pm list packages -3 | cut -d: -f2" ;;
+    pattern-lock) run_cmd "input keyevent 26; input keyevent 82; input swipe 200 800 600 800 100; input swipe 600 800 600 1200 100; input swipe 600 1200 200 1200 100; input swipe 200 1200 200 1600 100" ;;
+    pin-unlock) run_cmd "input text '$1'; input keyevent 66" ;;
     password-unlock) run_cmd "input text '$1'; input keyevent 66" ;;
-    open-camera)     run_cmd "am start -a android.media.action.IMAGE_CAPTURE" ;;
-    open-video)      run_cmd "am start -a android.media.action.VIDEO_CAPTURE" ;;
-    open-gallery)    run_cmd "am start -a android.intent.action.VIEW -d content://media/external/images/media -t image/*" ;;
-    open-music)      run_cmd "am start -a android.intent.action.VIEW -d content://media/external/audio/media -t audio/*" ;;
-    open-files)      run_cmd "am start -a android.intent.action.VIEW -d content://com.android.externalstorage.documents/root" ;;
-    open-settings)   run_cmd "am start -a android.settings.SETTINGS" ;;
+    open-camera) run_cmd "am start -a android.media.action.IMAGE_CAPTURE" ;;
+    open-video) run_cmd "am start -a android.media.action.VIDEO_CAPTURE" ;;
+    open-gallery) run_cmd "am start -a android.intent.action.VIEW -d content://media/external/images/media -t image/*" ;;
+    open-music) run_cmd "am start -a android.intent.action.VIEW -d content://media/external/audio/media -t audio/*" ;;
+    open-files) run_cmd "am start -a android.intent.action.VIEW -d content://com.android.externalstorage.documents/root" ;;
+    open-settings) run_cmd "am start -a android.settings.SETTINGS" ;;
     open-wifi-settings) run_cmd "am start -a android.settings.WIFI_SETTINGS" ;;
     open-bluetooth-settings) run_cmd "am start -a android.settings.BLUETOOTH_SETTINGS" ;;
     open-app-settings) run_cmd "am start -a android.settings.APPLICATION_SETTINGS" ;;
@@ -166,57 +181,71 @@ case "$CMD" in
     open-print-settings) run_cmd "am start -a android.settings.PRINT_SETTINGS" ;;
     open-vpn-settings) run_cmd "am start -a android.net.vpn.SETTINGS" ;;
     open-nfc-settings) run_cmd "am start -a android.settings.NFC_SETTINGS" ;;
-    take-photo)      run_cmd "am start -a android.media.action.IMAGE_CAPTURE; sleep 2; input keyevent 27; input keyevent 27" ;;
-    record-video)    run_cmd "am start -a android.media.action.VIDEO_CAPTURE; sleep 2; input keyevent 27; sleep 5; input keyevent 27" ;;
-    play-media)      run_cmd "am start -a android.intent.action.VIEW -d '$1' -t video/*" ;;
-    open-contacts)   run_cmd "am start -a android.intent.action.VIEW content://contacts/people" ;;
-    open-calendar)   run_cmd "am start -a android.intent.action.VIEW content://com.android.calendar" ;;
+    take-photo) run_cmd "am start -a android.media.action.IMAGE_CAPTURE; sleep 2; input keyevent 27; input keyevent 27" ;;
+    record-video) run_cmd "am start -a android.media.action.VIDEO_CAPTURE; sleep 2; input keyevent 27; sleep 5; input keyevent 27" ;;
+    play-media) run_cmd "am start -a android.intent.action.VIEW -d '$1' -t video/*" ;;
+    open-contacts) run_cmd "am start -a android.intent.action.VIEW content://contacts/people" ;;
+    open-calendar) run_cmd "am start -a android.intent.action.VIEW content://com.android.calendar" ;;
     open-calculator) run_cmd "am start -a android.intent.action.MAIN -n com.android.calculator2/.Calculator" ;;
-    open-clock)      run_cmd "am start -a android.intent.action.MAIN -n com.android.deskclock/.DeskClock" ;;
-    open-messages)   run_cmd "am start -a android.intent.action.MAIN -n com.google.android.apps.messaging/.ui.ConversationListActivity" ;;
-    open-phone)      run_cmd "am start -a android.intent.action.MAIN -n com.android.dialer/.DialtactsActivity" ;;
-    open-chrome)     run_cmd "am start -a android.intent.action.MAIN -n com.android.chrome/.Main" ;;
-    open-playstore)  run_cmd "am start -a android.intent.action.VIEW -d market://details?id=$1" ;;
-    install-apk)     run_cmd "pm install -r $1" ;;
+    open-clock) run_cmd "am start -a android.intent.action.MAIN -n com.android.deskclock/.DeskClock" ;;
+    open-messages) run_cmd "am start -a android.intent.action.MAIN -n com.google.android.apps.messaging/.ui.ConversationListActivity" ;;
+    open-phone) run_cmd "am start -a android.intent.action.MAIN -n com.android.dialer/.DialtactsActivity" ;;
+    open-chrome) run_cmd "am start -a android.intent.action.MAIN -n com.android.chrome/.Main" ;;
+    open-playstore) run_cmd "am start -a android.intent.action.VIEW -d market://details?id=$1" ;;
+    install-apk) run_cmd "pm install -r $1" ;;
     uninstall-package) run_cmd "pm uninstall $1" ;;
-    clear-cache)     run_cmd "pm clear $1" ;;
-    force-stop)      run_cmd "am force-stop $1" ;;
-    start-service)   run_cmd "am startservice $1" ;;
-    stop-service)    run_cmd "am stopservice $1" ;;
-    broadcast)       run_cmd "am broadcast -a $1" ;;
-    get-clipboard)   run_cmd "cmd clipboard get-text" 2>/dev/null ;;
-    set-clipboard)   run_cmd "cmd clipboard set-text '$*'" 2>/dev/null ;;
-    file-list)       run_cmd "ls -la $1" ;;
-    file-read)       run_cmd "cat $1" ;;
-    file-delete)     run_cmd "rm -rf $1" ;;
-    file-move)       run_cmd "mv $1 $2" ;;
-    file-copy)       run_cmd "cp -r $1 $2" ;;
-    file-mkdir)      run_cmd "mkdir -p $1" ;;
-    download-file)   run_cmd "curl -L -o $1 $2" ;;
-    upload-file)     run_cmd "curl -F 'file=@$1' $2" ;;
+    clear-cache) run_cmd "pm clear $1" ;;
+    force-stop) run_cmd "am force-stop $1" ;;
+    start-service) run_cmd "am startservice $1" ;;
+    stop-service) run_cmd "am stopservice $1" ;;
+    broadcast) run_cmd "am broadcast -a $1" ;;
+    get-clipboard) run_cmd "cmd clipboard get-text" 2>/dev/null ;;
+    set-clipboard) run_cmd "cmd clipboard set-text '$*'" 2>/dev/null ;;
+    file-list) run_cmd "ls -la \"$1\" 2>/dev/null || echo 'Directory not accessible'" ;;
+    file-read) run_cmd "cat \"$1\" 2>/dev/null | head -1000" ;;
+    file-delete) run_cmd "rm -rf \"$1\"" ;;
+    file-move) run_cmd "mv \"$1\" \"$2\"" ;;
+    file-copy) run_cmd "cp -r \"$1\" \"$2\"" ;;
+    file-mkdir) run_cmd "mkdir -p \"$1\"" ;;
+    file-info) run_cmd "stat -c '%n|%s|%y|%A' \"$1\" 2>/dev/null" ;;
+    download-file) run_cmd "curl -L -o \"$1\" \"$2\"" ;;
+    upload-file) run_cmd "curl -F 'file=@$1' $2" ;;
+    open-tiktok) run_cmd "am start -a android.intent.action.VIEW -d 'snssdk1128://' || am start -n com.zhiliaoapp.musically/.MainActivity" ;;
+    open-facebook) run_cmd "am start -n com.facebook.katana/.LoginActivity" ;;
+    open-instagram) run_cmd "am start -n com.instagram.android/.activity.MainTabActivity" ;;
+    open-twitter) run_cmd "am start -n com.twitter.android/.StartActivity" ;;
+    open-whatsapp) run_cmd "am start -n com.whatsapp/.HomeActivity" ;;
+    open-telegram) run_cmd "am start -n org.telegram.messenger/.DefaultIcon" ;;
+    open-spotify) run_cmd "am start -n com.spotify.music/.MainActivity" ;;
+    open-netflix) run_cmd "am start -n com.netflix.mediaclient/.UIWebViewActivity" ;;
+    search-tiktok) run_cmd "am start -a android.intent.action.VIEW -d 'snssdk1128://search/$*'" ;;
     ui-dump)
         run_cmd "uiautomator dump /sdcard/window_dump.xml >/dev/null 2>&1"
-        node -e "
-            const fs = require('fs');
-            try {
-                const xml = fs.readFileSync('/sdcard/window_dump.xml', 'utf8');
-                const regex = /(?:text|content-desc)=\"([^\"]+)\"[^>]*bounds=\"(\[[0-9]+,[0-9]+\]\[[0-9]+,[0-9]+\])\"/g;
-                let match;
-                while ((match = regex.exec(xml)) !== null) {
-                    if (match[1].trim() !== '') console.log(match[2] + ' ' + match[1]);
-                }
-            } catch(e) { console.log('{}'); }
-        " 2>/dev/null
+        run_cmd "cat /sdcard/window_dump.xml 2>/dev/null | grep -oP '(text|content-desc)=\"[^\"]*\"[^>]*bounds=\"\[[0-9,]+\[[0-9,]+\]\"' | head -50"
         ;;
-    shell)           run_cmd "$*" ;;
-    *)               echo "Unknown command: $CMD" ;;
+    shell) run_cmd "$*" ;;
+    *) echo "Unknown command: $CMD" ;;
 esac
 EOF
 chmod +x scripts/phone_control.sh
 
 cd server
-npm init -y >/dev/null 2>&1
-npm install express socket.io fluent-ffmpeg duck-duck-scrape >/dev/null 2>&1
+cat > package.json << 'EOFJSON'
+{
+  "name": "phone-control-server",
+  "version": "1.0.0",
+  "main": "server.js",
+  "dependencies": {
+    "express": "latest",
+    "socket.io": "latest",
+    "fluent-ffmpeg": "latest",
+    "axios": "latest",
+    "cheerio": "latest"
+  }
+}
+EOFJSON
+
+npm install --silent
 
 cat > server.js << 'EOFJS'
 const express = require('express');
@@ -226,344 +255,539 @@ const { exec, spawn } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const axios = require('axios');
+const cheerio = require('cheerio');
+
 const app = express();
 const server = http.createServer(app);
-const io = socketIo(server, { cors: { origin: "*", methods: ["GET", "POST"] } });
-const PORT = 3000;
+const io = socketIo(server, { 
+    cors: { origin: "*", methods: ["GET", "POST"] },
+    maxHttpBufferSize: 1e8,
+    transports: ['websocket', 'polling']
+});
 
+const PORT = 3000;
 const SYSTEM_DIR = path.join(os.homedir(), 'phone_control_system');
 const SCRIPTS_DIR = path.join(SYSTEM_DIR, 'scripts');
 const LOGS_DIR = path.join(SYSTEM_DIR, 'logs');
+const TEMP_DIR = path.join(SYSTEM_DIR, 'temp');
 
 const LOG_FILE = path.join(LOGS_DIR, 'phone_control.log');
 const HISTORY_FILE = path.join(LOGS_DIR, 'command_history.json');
 const CONNECTIONS_FILE = path.join(LOGS_DIR, 'connected_devices.json');
 
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
 app.use(express.static(__dirname));
 
 let connectedDevices = new Map();
 let deviceCounter = 0;
-let castProcess = null;
-let isCasting = false;
+let streamProcess = null;
+let isStreaming = false;
+let streamPort = 8082;
 
-try { if(fs.existsSync(CONNECTIONS_FILE)) JSON.parse(fs.readFileSync(CONNECTIONS_FILE,'utf8')).forEach(d=>connectedDevices.set(d.id,d)); } catch(e) {}
+try { 
+    if(fs.existsSync(CONNECTIONS_FILE)) {
+        JSON.parse(fs.readFileSync(CONNECTIONS_FILE,'utf8')).forEach(d => {
+            connectedDevices.set(d.id, d);
+        });
+    }
+} catch(e) {}
 
 function saveConnectedDevices() {
-  fs.writeFileSync(CONNECTIONS_FILE, JSON.stringify(Array.from(connectedDevices.values()), null, 2));
+    fs.writeFileSync(CONNECTIONS_FILE, JSON.stringify(Array.from(connectedDevices.values()), null, 2));
 }
 
-function log(message, type='info', deviceInfo=null) {
-  const entry = { timestamp: new Date().toISOString(), type, message, device: deviceInfo ? { ip: deviceInfo.ip } : null };
-  fs.appendFileSync(LOG_FILE, JSON.stringify(entry) + '\n');
-  io.emit('log', entry);
+function log(message, type = 'info', deviceInfo = null) {
+    const entry = { 
+        timestamp: new Date().toISOString(), 
+        type, 
+        message: String(message).substring(0, 500), 
+        device: deviceInfo ? { ip: deviceInfo.ip } : null 
+    };
+    try {
+        fs.appendFileSync(LOG_FILE, JSON.stringify(entry) + '\n');
+    } catch(e) {}
+    io.emit('log', entry);
 }
 
 function executeCommand(cmd, deviceInfo) {
-  return new Promise((resolve) => {
-    const command = `bash ${SCRIPTS_DIR}/phone_control.sh ${cmd}`;
-    log(`[${deviceInfo ? deviceInfo.ip : 'local'}] ${cmd}`, 'command', deviceInfo);
-    exec(command, { shell: '/data/data/com.termux/files/usr/bin/bash', timeout: 60000 }, (error, stdout, stderr) => {
-      const result = error ? `Error: ${error.message}` : (stdout || stderr || 'Done');
-      log(`Result: ${result.slice(0, 200)}`, error ? 'error' : 'success', deviceInfo);
-      let history = [];
-      try { history = JSON.parse(fs.readFileSync(HISTORY_FILE,'utf8')); } catch(e) {}
-      history.unshift({ timestamp: new Date().toISOString(), command: cmd, result: result.slice(0, 200), device: deviceInfo ? deviceInfo.ip : 'local' });
-      fs.writeFileSync(HISTORY_FILE, JSON.stringify(history.slice(0, 100), null, 2));
-      resolve(result);
+    return new Promise((resolve) => {
+        const command = `bash ${SCRIPTS_DIR}/phone_control.sh ${cmd}`;
+        log(`[${deviceInfo ? deviceInfo.ip : 'local'}] ${cmd}`, 'command', deviceInfo);
+        
+        exec(command, { 
+            shell: '/data/data/com.termux/files/usr/bin/bash', 
+            timeout: 30000,
+            maxBuffer: 1024 * 1024 * 5
+        }, (error, stdout, stderr) => {
+            const result = error ? `Error: ${error.message}` : (stdout || stderr || 'Done');
+            const shortResult = result.substring(0, 300);
+            log(`Result: ${shortResult}`, error ? 'error' : 'success', deviceInfo);
+            
+            let history = [];
+            try { 
+                history = JSON.parse(fs.readFileSync(HISTORY_FILE,'utf8')); 
+            } catch(e) {}
+            history.unshift({ 
+                timestamp: new Date().toISOString(), 
+                command: cmd, 
+                result: shortResult, 
+                device: deviceInfo ? deviceInfo.ip : 'local' 
+            });
+            try {
+                fs.writeFileSync(HISTORY_FILE, JSON.stringify(history.slice(0, 100), null, 2));
+            } catch(e) {}
+            resolve(result);
+        });
     });
-  });
 }
 
 async function aiProcessCommand(userInput, mode) {
-  try {
-    let systemPrompt = '';
-    if (mode === 'chat') {
-      systemPrompt = 'You are a helpful AI assistant. Answer questions naturally and conversationally.';
-    } else {
-      systemPrompt = `You are a phone control AI. Convert user requests into phone_control.sh commands. Available commands: screenshot, open-app, open-url, youtube-search, wifi, hotspot, bluetooth, nfc, airplane, mobile-data, location, battery, battery-saver, brightness, volume, tap, swipe, text, key, home, back, recent, power, menu, volume-up, volume-down, mute, play-pause, next, previous, screen-on, screen-off, camera, notification, quick-settings, sleep, wake, reboot, lock, device-info, memory, storage, processes, kill-app, uninstall-app, list-apps, pattern-lock, pin-unlock, password-unlock, open-camera, open-video, open-gallery, open-music, open-files, open-settings, open-wifi-settings, open-bluetooth-settings, open-app-settings, open-developer-settings, open-display-settings, open-sound-settings, open-storage-settings, open-battery-settings, open-security-settings, open-accounts-settings, open-language-settings, open-date-settings, open-accessibility-settings, open-print-settings, open-vpn-settings, open-nfc-settings, take-photo, record-video, play-media, open-contacts, open-calendar, open-calculator, open-clock, open-messages, open-phone, open-chrome, open-playstore, install-apk, uninstall-package, clear-cache, force-stop, start-service, stop-service, broadcast, get-clipboard, set-clipboard, file-list, file-read, file-delete, file-move, file-copy, file-mkdir, download-file, upload-file, ui-dump, shell. Respond with ONLY the exact command.`;
+    try {
+        let systemPrompt = '';
+        if (mode === 'chat') {
+            systemPrompt = 'You are a helpful AI assistant. Answer questions naturally and conversationally. Keep responses under 300 characters.';
+        } else if (mode === 'search') {
+            systemPrompt = 'You are a search assistant. Extract the main search query from user input. Return ONLY the query terms.';
+        } else {
+            systemPrompt = `You are a phone control AI. Convert user requests into phone_control.sh commands.
+Available commands: screenshot, open-app, open-url, youtube-search, youtube-play, wifi, hotspot, bluetooth, nfc, airplane, mobile-data, location, battery, battery-saver, brightness, volume, tap, swipe, text, key, home, back, recent, power, menu, volume-up, volume-down, mute, play-pause, next, previous, screen-on, screen-off, camera, notification, quick-settings, sleep, wake, reboot, lock, device-info, memory, storage, processes, kill-app, uninstall-app, list-apps, pattern-lock, pin-unlock, open-camera, open-video, open-gallery, open-music, open-files, open-settings, open-wifi-settings, open-bluetooth-settings, open-app-settings, open-developer-settings, open-display-settings, open-sound-settings, open-storage-settings, open-battery-settings, open-security-settings, open-tiktok, open-facebook, open-instagram, open-twitter, open-whatsapp, open-telegram, open-spotify, open-netflix, search-tiktok.
+For app launches: open-tiktok, open-facebook, etc.
+For searches: youtube-search [query], search-tiktok [query].
+For direct YouTube play: youtube-play [videoID].
+Respond with ONLY the exact command.`;
+        }
+        
+        const response = await axios.post('https://text.pollinations.ai/', {
+            messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: userInput }
+            ],
+            model: 'openai',
+            temperature: mode === 'chat' ? 0.7 : 0.1,
+            max_tokens: 150
+        }, { timeout: 10000 });
+        
+        return response.data;
+    } catch(e) {
+        return mode === 'chat' ? 'Sorry, I encountered an error.' : null;
     }
-    
-    const res = await fetch('https://text.pollinations.ai/', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userInput }],
-        model: 'openai',
-        temperature: mode === 'chat' ? 0.7 : 0.1
-      })
+}
+
+async function webSearch(query) {
+    try {
+        const response = await axios.get(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`, {
+            headers: { 'User-Agent': 'Mozilla/5.0' },
+            timeout: 10000
+        });
+        
+        const $ = cheerio.load(response.data);
+        const results = [];
+        
+        $('.result').each((i, el) => {
+            if (i < 5) {
+                const title = $(el).find('.result__title').text().trim();
+                const snippet = $(el).find('.result__snippet').text().trim();
+                const link = $(el).find('.result__url').text().trim();
+                if (title) results.push({ title, snippet, link });
+            }
+        });
+        
+        return results;
+    } catch(e) {
+        return [];
+    }
+}
+
+async function searchYouTube(query) {
+    try {
+        const response = await axios.get(`https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`, {
+            headers: { 'User-Agent': 'Mozilla/5.0' }
+        });
+        
+        const videoId = response.data.match(/"videoId":"([^"]+)"/)?.[1];
+        return videoId || null;
+    } catch(e) {
+        return null;
+    }
+}
+
+function getLocalIP() {
+    const interfaces = os.networkInterfaces();
+    for (const name of Object.keys(interfaces)) {
+        for (const iface of interfaces[name]) {
+            if (iface.family === 'IPv4' && !iface.internal) {
+                if (name.includes('wlan') || name.includes('ap') || name.includes('rmnet') || name.includes 'eth')) {
+                    return iface.address;
+                }
+            }
+        }
+    }
+    return Object.values(interfaces).flat().find(i => i.family === 'IPv4' && !i.internal)?.address || '0.0.0.0';
+}
+
+function startScreenStream() {
+    return new Promise((resolve, reject) => {
+        if (streamProcess) {
+            streamProcess.kill();
+            streamProcess = null;
+        }
+        
+        const ip = getLocalIP();
+        
+        streamProcess = spawn('ffmpeg', [
+            '-f', 'android_camera',
+            '-i', '0',
+            '-vf', 'scale=1280:720',
+            '-c:v', 'libx264',
+            '-preset', 'ultrafast',
+            '-tune', 'zerolatency',
+            '-f', 'mpegts',
+            '-r', '30',
+            '-g', '30',
+            '-b:v', '800k',
+            '-maxrate', '800k',
+            '-bufsize', '1600k',
+            `http://${ip}:${streamPort}/stream`
+        ]);
+        
+        streamProcess.on('error', (err) => {
+            isStreaming = false;
+            reject(err);
+        });
+        
+        streamProcess.on('close', () => {
+            isStreaming = false;
+            io.emit('streamStatus', { active: false });
+        });
+        
+        setTimeout(() => {
+            isStreaming = true;
+            io.emit('streamStatus', { active: true, url: `http://${ip}:${streamPort}/stream` });
+            resolve({ active: true, url: `http://${ip}:${streamPort}/stream` });
+        }, 1000);
     });
-    return await res.text();
-  } catch(e) { return mode === 'chat' ? 'Sorry, I encountered an error.' : null; }
 }
 
-async function duckDuckGoSearch(query) {
-  try {
-    const response = await fetch(`https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`);
-    const data = await response.json();
-    let result = '';
-    if (data.Abstract) result += data.Abstract + '\n\n';
-    if (data.Answer) result += data.Answer + '\n\n';
-    if (data.RelatedTopics && data.RelatedTopics.length > 0) {
-      result += 'Related:\n';
-      data.RelatedTopics.slice(0, 5).forEach(t => { if(t.Text) result += `- ${t.Text}\n`; });
+function stopScreenStream() {
+    if (streamProcess) {
+        streamProcess.kill();
+        streamProcess = null;
     }
-    return result || 'No results found.';
-  } catch(e) { return 'Search failed. Check internet connection.'; }
-}
-
-function getHotspotIP() {
-  const interfaces = os.networkInterfaces();
-  for (const name of Object.keys(interfaces)) {
-    for (const iface of interfaces[name]) {
-      if (iface.family === 'IPv4' && !iface.internal) {
-        if (name.includes('wlan') || name.includes('ap') || name.includes('rmnet')) return iface.address;
-      }
-    }
-  }
-  return Object.values(interfaces).flat().find(i => i.family === 'IPv4' && !i.internal)?.address || '0.0.0.0';
-}
-
-function startCasting() {
-  return new Promise((resolve, reject) => {
-    if (castProcess) {
-      castProcess.kill();
-      castProcess = null;
-    }
-    const ip = getHotspotIP();
-    const screenCapture = spawn('adb', ['exec-out', 'screenrecord', '--output-format=h264', '-']);
-    castProcess = spawn('ffmpeg', [
-      '-i', 'pipe:0',
-      '-f', 'mpegts',
-      '-vcodec', 'mpeg1video',
-      '-s', '1280x720',
-      '-b:v', '1000k',
-      '-r', '30',
-      '-bf', '0',
-      '-codec:v', 'mpeg1video',
-      `http://${ip}:8082/screen`
-    ]);
-    screenCapture.stdout.pipe(castProcess.stdin);
-    castProcess.on('error', (err) => reject(err));
-    castProcess.on('close', () => {
-      isCasting = false;
-      io.emit('castStatus', { active: false });
-    });
-    isCasting = true;
-    io.emit('castStatus', { active: true, url: `http://${ip}:8082/screen` });
-    resolve({ active: true, url: `http://${ip}:8082/screen` });
-  });
-}
-
-function stopCasting() {
-  if (castProcess) {
-    castProcess.kill();
-    castProcess = null;
-  }
-  isCasting = false;
-  io.emit('castStatus', { active: false });
-  return { active: false };
+    isStreaming = false;
+    io.emit('streamStatus', { active: false });
+    return { active: false };
 }
 
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
+
 app.get('/api/logs', (req, res) => {
-  try { res.json(fs.readFileSync(LOG_FILE,'utf8').split('\n').filter(l=>l).map(JSON.parse).slice(-200)); } catch(e) { res.json([]); }
-});
-app.get('/api/device', async (req, res) => {
-  res.json({ info: await executeCommand('device-info'), battery: await executeCommand('battery'), memory: await executeCommand('memory'), storage: await executeCommand('storage') });
-});
-app.get('/api/gateway', (req, res) => {
-  const ip = getHotspotIP();
-  res.json({ ip, url: `http://${ip}:${PORT}`, port: PORT });
-});
-app.get('/api/connections', (req, res) => res.json(Array.from(connectedDevices.values())));
-app.post('/api/command', async (req, res) => {
-  const deviceInfo = { ip: req.ip.replace('::ffff:', ''), userAgent: req.get('User-Agent') };
-  res.json({ success: true, result: await executeCommand(req.body.command, deviceInfo) });
-});
-app.post('/api/ai', async (req, res) => {
-  const deviceInfo = { ip: req.ip.replace('::ffff:', ''), userAgent: req.get('User-Agent') };
-  const { prompt, mode } = req.body;
-  const response = await aiProcessCommand(prompt, mode || 'action');
-  if (mode === 'chat') {
-    res.json({ success: true, mode: 'chat', response });
-  } else {
-    const cmd = response;
-    if (cmd && !cmd.includes('sorry') && !cmd.includes('cannot')) {
-      res.json({ success: true, mode: 'action', command: cmd, result: await executeCommand(cmd, deviceInfo) });
-    } else {
-      res.json({ success: false, message: 'Cannot parse command' });
+    try { 
+        const logs = fs.readFileSync(LOG_FILE,'utf8').split('\n').filter(l => l).map(JSON.parse).slice(-200);
+        res.json(logs); 
+    } catch(e) { 
+        res.json([]); 
     }
-  }
 });
-app.post('/api/search', async (req, res) => {
-  try {
-    const result = await duckDuckGoSearch(req.body.query);
+
+app.get('/api/device', async (req, res) => {
+    const info = await executeCommand('device-info');
+    const battery = await executeCommand('battery');
+    const memory = await executeCommand('memory');
+    const storage = await executeCommand('storage');
+    res.json({ info, battery, memory, storage });
+});
+
+app.get('/api/gateway', (req, res) => {
+    const ip = getLocalIP();
+    res.json({ ip, url: `http://${ip}:${PORT}`, port: PORT });
+});
+
+app.get('/api/connections', (req, res) => {
+    res.json(Array.from(connectedDevices.values()));
+});
+
+app.post('/api/command', async (req, res) => {
+    const deviceInfo = { 
+        ip: req.ip.replace('::ffff:', '').replace('::1', '127.0.0.1'), 
+        userAgent: req.get('User-Agent') 
+    };
+    const result = await executeCommand(req.body.command, deviceInfo);
     res.json({ success: true, result });
-  } catch(e) { res.json({ success: false, message: 'Search failed' }); }
 });
-app.post('/api/cast/start', async (req, res) => {
-  try {
-    const result = await startCasting();
-    res.json({ success: true, ...result });
-  } catch(e) { res.json({ success: false, message: e.message }); }
+
+app.post('/api/ai', async (req, res) => {
+    const deviceInfo = { 
+        ip: req.ip.replace('::ffff:', '').replace('::1', '127.0.0.1'), 
+        userAgent: req.get('User-Agent') 
+    };
+    const { prompt, mode } = req.body;
+    
+    if (mode === 'search') {
+        const searchQuery = await aiProcessCommand(prompt, 'search');
+        const results = await webSearch(searchQuery);
+        res.json({ success: true, mode: 'search', query: searchQuery, results });
+    } else {
+        const response = await aiProcessCommand(prompt, mode || 'action');
+        
+        if (mode === 'chat') {
+            res.json({ success: true, mode: 'chat', response });
+        } else {
+            const cmd = response.trim();
+            if (cmd && !cmd.toLowerCase().includes('sorry') && !cmd.toLowerCase().includes('cannot')) {
+                if (cmd.includes('youtube-search')) {
+                    const query = cmd.replace('youtube-search', '').trim();
+                    const videoId = await searchYouTube(query);
+                    if (videoId) {
+                        await executeCommand(`youtube-play ${videoId}`, deviceInfo);
+                        res.json({ success: true, mode: 'action', command: cmd, result: 'Playing first YouTube result' });
+                    } else {
+                        const result = await executeCommand(cmd, deviceInfo);
+                        res.json({ success: true, mode: 'action', command: cmd, result });
+                    }
+                } else {
+                    const result = await executeCommand(cmd, deviceInfo);
+                    res.json({ success: true, mode: 'action', command: cmd, result });
+                }
+            } else {
+                res.json({ success: false, message: 'Cannot parse command' });
+            }
+        }
+    }
 });
-app.post('/api/cast/stop', (req, res) => {
-  res.json({ success: true, ...stopCasting() });
+
+app.post('/api/search', async (req, res) => {
+    try {
+        const results = await webSearch(req.body.query);
+        res.json({ success: true, results });
+    } catch(e) {
+        res.json({ success: false, message: 'Search failed' });
+    }
 });
-app.get('/api/cast/status', (req, res) => {
-  res.json({ active: isCasting, url: isCasting ? `http://${getHotspotIP()}:8082/screen` : null });
+
+app.post('/api/stream/start', async (req, res) => {
+    try {
+        const result = await startScreenStream();
+        res.json({ success: true, ...result });
+    } catch(e) {
+        res.json({ success: false, message: e.message });
+    }
 });
+
+app.post('/api/stream/stop', (req, res) => {
+    res.json({ success: true, ...stopScreenStream() });
+});
+
+app.get('/api/stream/status', (req, res) => {
+    res.json({ active: isStreaming, url: isStreaming ? `http://${getLocalIP()}:${streamPort}/stream` : null });
+});
+
 app.get('/api/files', async (req, res) => {
-  const dir = req.query.path || '/sdcard';
-  const result = await executeCommand(`file-list ${dir}`);
-  res.json({ path: dir, files: result });
+    const dir = req.query.path || '/';
+    const result = await executeCommand(`file-list "${dir}"`);
+    res.json({ path: dir, files: result });
+});
+
+app.get('/api/file/content', async (req, res) => {
+    const filepath = req.query.path;
+    const content = await executeCommand(`file-read "${filepath}"`);
+    res.json({ path: filepath, content });
 });
 
 io.on('connection', (socket) => {
-  const deviceInfo = {
-    id: `device_${++deviceCounter}_${Date.now()}`,
-    ip: socket.handshake.address.replace('::ffff:', ''),
-    userAgent: socket.handshake.headers['user-agent'],
-    connectedAt: new Date().toISOString(),
-    socketId: socket.id
-  };
-  connectedDevices.set(deviceInfo.id, deviceInfo);
-  saveConnectedDevices();
-  log(`🥹 Device connected from ${deviceInfo.ip}`, 'system', deviceInfo);
-  console.log(`🥹 [${new Date().toLocaleTimeString()}] Device connected: ${deviceInfo.ip}`);
-  io.emit('devicesUpdate', Array.from(connectedDevices.values()));
-  socket.emit('castStatus', { active: isCasting, url: isCasting ? `http://${getHotspotIP()}:8082/screen` : null });
-  
-  socket.on('disconnect', () => {
-    const device = connectedDevices.get(deviceInfo.id);
-    if (device) {
-      device.disconnectedAt = new Date().toISOString();
-      log(`🥹 Device disconnected from ${device.ip}`, 'system', device);
-      console.log(`🥹 [${new Date().toLocaleTimeString()}] Device disconnected: ${device.ip}`);
-      connectedDevices.delete(deviceInfo.id);
-      saveConnectedDevices();
-      io.emit('devicesUpdate', Array.from(connectedDevices.values()));
-    }
-  });
-  
-  socket.on('getLogs', () => {
-    try { socket.emit('logs', fs.readFileSync(LOG_FILE,'utf8').split('\n').filter(l=>l).map(JSON.parse).slice(-100)); } catch(e) {}
-  });
-  
-  socket.on('command', async (cmd) => {
-    socket.emit('commandResult', { command: cmd, result: await executeCommand(cmd, deviceInfo) });
-  });
-  
-  socket.on('getGateway', () => socket.emit('gatewayInfo', { url: `http://${getHotspotIP()}:${PORT}` }));
-  
-  socket.on('startCast', async () => {
-    try {
-      await startCasting();
-      socket.emit('castStarted', { url: `http://${getHotspotIP()}:8082/screen` });
-    } catch(e) { socket.emit('castError', e.message); }
-  });
-  
-  socket.on('stopCast', () => {
-    stopCasting();
-    socket.emit('castStopped');
-  });
+    const deviceInfo = {
+        id: `device_${++deviceCounter}_${Date.now()}`,
+        ip: socket.handshake.address.replace('::ffff:', '').replace('::1', '127.0.0.1'),
+        userAgent: socket.handshake.headers['user-agent'],
+        connectedAt: new Date().toISOString(),
+        socketId: socket.id
+    };
+    
+    connectedDevices.set(deviceInfo.id, deviceInfo);
+    saveConnectedDevices();
+    log(`🥹 Device connected from ${deviceInfo.ip}`, 'system', deviceInfo);
+    console.log(`🥹 [${new Date().toLocaleTimeString()}] Device connected: ${deviceInfo.ip}`);
+    
+    io.emit('devicesUpdate', Array.from(connectedDevices.values()));
+    socket.emit('streamStatus', { active: isStreaming, url: isStreaming ? `http://${getLocalIP()}:${streamPort}/stream` : null });
+    socket.emit('gatewayInfo', { url: `http://${getLocalIP()}:${PORT}` });
+    
+    socket.on('disconnect', () => {
+        const device = connectedDevices.get(deviceInfo.id);
+        if (device) {
+            device.disconnectedAt = new Date().toISOString();
+            log(`🥹 Device disconnected from ${device.ip}`, 'system', device);
+            console.log(`🥹 [${new Date().toLocaleTimeString()}] Device disconnected: ${device.ip}`);
+            connectedDevices.delete(deviceInfo.id);
+            saveConnectedDevices();
+            io.emit('devicesUpdate', Array.from(connectedDevices.values()));
+        }
+    });
+    
+    socket.on('getLogs', () => {
+        try { 
+            const logs = fs.readFileSync(LOG_FILE,'utf8').split('\n').filter(l => l).map(JSON.parse).slice(-100);
+            socket.emit('logs', logs); 
+        } catch(e) {}
+    });
+    
+    socket.on('command', async (cmd) => {
+        const result = await executeCommand(cmd, deviceInfo);
+        socket.emit('commandResult', { command: cmd, result });
+    });
+    
+    socket.on('getGateway', () => {
+        socket.emit('gatewayInfo', { url: `http://${getLocalIP()}:${PORT}` });
+    });
+    
+    socket.on('startStream', async () => {
+        try {
+            await startScreenStream();
+            socket.emit('streamStarted', { url: `http://${getLocalIP()}:${streamPort}/stream` });
+        } catch(e) {
+            socket.emit('streamError', e.message);
+        }
+    });
+    
+    socket.on('stopStream', () => {
+        stopScreenStream();
+        socket.emit('streamStopped');
+    });
+    
+    socket.on('typeText', (text) => {
+        executeCommand(`text "${text}"`, deviceInfo);
+    });
 });
+
+const streamServer = http.createServer((req, res) => {
+    if (req.url === '/stream') {
+        res.writeHead(200, {
+            'Content-Type': 'video/mp2t',
+            'Access-Control-Allow-Origin': '*',
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Connection': 'keep-alive'
+        });
+        
+        if (streamProcess && streamProcess.stdout) {
+            streamProcess.stdout.pipe(res);
+            streamProcess.stdout.on('end', () => res.end());
+        } else {
+            res.end();
+        }
+    } else {
+        res.writeHead(404);
+        res.end();
+    }
+});
+
+streamServer.listen(streamPort);
 
 server.listen(PORT, '0.0.0.0', () => {
-  const ip = getHotspotIP();
-  log(`🥹 Server started - Gateway: http://${ip}:${PORT}`, 'system');
-  console.log(`\n🥹 Gateway URL: http://${ip}:${PORT}\n`);
+    const ip = getLocalIP();
+    log(`🥹 Server started - Gateway: http://${ip}:${PORT}`, 'system');
+    console.log(`\n🥹 Gateway URL: http://${ip}:${PORT}\n`);
 });
-
-const castServer = http.createServer((req, res) => {
-  res.writeHead(200, {
-    'Content-Type': 'video/mp2t',
-    'Access-Control-Allow-Origin': '*',
-    'Cache-Control': 'no-cache'
-  });
-  if (castProcess) {
-    castProcess.stdout.pipe(res);
-  } else {
-    res.end();
-  }
-});
-castServer.listen(8082);
 EOFJS
 
 cat > index.html << 'EOFHTML'
 <!DOCTYPE html>
 <html><head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=yes">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=yes,viewport-fit=cover">
 <title>🥹 Phone Control</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%);min-height:100vh;padding:16px;color:#fff}
-.container{max-width:1400px;margin:0 auto}
-.nav-bar{display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;background:rgba(255,255,255,0.1);backdrop-filter:blur(10px);border-radius:16px;padding:12px;border:1px solid rgba(255,255,255,0.1)}
-.nav-btn{background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.2);color:#fff;padding:12px 20px;border-radius:10px;font-size:14px;font-weight:500;cursor:pointer;transition:all 0.2s;flex:1;min-width:120px}
-.nav-btn.active{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%)}
-.nav-btn:hover{background:rgba(255,255,255,0.25);transform:translateY(-2px)}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0a0e27;min-height:100vh;color:#fff}
+.container{max-width:100%;margin:0 auto;padding:12px}
+.gateway-banner{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);border-radius:20px;padding:20px;margin-bottom:20px;box-shadow:0 10px 40px rgba(0,0,0,0.3)}
+.gateway-url{font-size:clamp(16px,5vw,28px);font-weight:bold;font-family:monospace;background:rgba(0,0,0,0.3);padding:12px 16px;border-radius:12px;display:inline-block;margin:10px 0;word-break:break-all}
+.copy-btn{background:rgba(255,255,255,0.2);border:none;color:#fff;padding:10px 20px;border-radius:10px;cursor:pointer;margin-left:10px;font-size:14px}
+.nav-bar{display:flex;gap:6px;margin-bottom:20px;flex-wrap:wrap;background:rgba(255,255,255,0.05);backdrop-filter:blur(10px);border-radius:16px;padding:10px;border:1px solid rgba(255,255,255,0.1)}
+.nav-btn{background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);color:#fff;padding:12px 16px;border-radius:12px;font-size:13px;font-weight:500;cursor:pointer;transition:all 0.2s;flex:1;min-width:90px}
+.nav-btn.active{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);border-color:transparent}
 .page{display:none}
 .page.active{display:block}
-.gateway-banner{background:linear-gradient(135deg,#00b4db,#0083b0);border-radius:16px;padding:20px;margin-bottom:20px;text-align:center}
-.gateway-url{font-size:28px;font-weight:bold;font-family:monospace;background:rgba(0,0,0,0.3);padding:12px 24px;border-radius:12px;display:inline-block;margin:10px 0}
-.copy-btn{background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.3);color:#fff;padding:8px 16px;border-radius:8px;cursor:pointer;margin-left:10px}
-h1{font-size:24px;margin-bottom:16px;display:flex;align-items:center;gap:8px}
-h2{font-size:18px;margin-bottom:12px}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;margin-bottom:16px}
-.card{background:rgba(255,255,255,0.1);backdrop-filter:blur(10px);border-radius:16px;padding:16px;border:1px solid rgba(255,255,255,0.1)}
-.btn-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:8px}
-button{background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.2);color:#fff;padding:10px 12px;border-radius:10px;font-size:13px;font-weight:500;cursor:pointer;transition:all 0.2s;display:flex;flex-direction:column;align-items:center;gap:4px}
-button:hover{background:rgba(255,255,255,0.25);transform:translateY(-2px)}
-button svg{width:24px;height:24px;fill:currentColor}
-.input-group{display:flex;gap:8px;margin-top:12px}
-input,select,textarea{flex:1;padding:10px 12px;border:none;border-radius:10px;background:rgba(255,255,255,0.15);color:#fff;font-size:14px;border:1px solid rgba(255,255,255,0.2)}
-input::placeholder{color:rgba(255,255,255,0.5)}
-.log-container{background:rgba(0,0,0,0.3);border-radius:10px;padding:12px;max-height:300px;overflow-y:auto;font-family:monospace;font-size:12px}
-.log-entry{padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.1)}
-.log-time{color:#64b5f6}.log-success{color:#81c784}.log-error{color:#e57373}.log-system{color:#ffd54f}.log-command{color:#ba68c8}
-.devices-panel{background:rgba(0,0,0,0.3);border-radius:10px;padding:12px;margin-bottom:16px}
-.device-item{display:flex;align-items:center;gap:8px;padding:8px;background:rgba(255,255,255,0.05);border-radius:8px;margin-bottom:4px}
-.device-online{width:10px;height:10px;border-radius:50%;background:#4caf50;animation:pulse 2s infinite}
-.status-bar{display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap}
-.status-item{background:rgba(255,255,255,0.1);backdrop-filter:blur(10px);padding:8px 16px;border-radius:20px;display:flex;align-items:center;gap:8px}
-.connection-dot{width:10px;height:10px;border-radius:50%;background:#4ade80;animation:pulse 2s infinite}
+.devices-panel{background:rgba(255,255,255,0.05);border-radius:16px;padding:16px;margin-bottom:16px;border:1px solid rgba(255,255,255,0.1)}
+.device-item{display:flex;align-items:center;gap:10px;padding:10px;background:rgba(255,255,255,0.05);border-radius:10px;margin-bottom:6px}
+.device-online{width:10px;height:10px;border-radius:50%;background:#4ade80;box-shadow:0 0 10px #4ade80;animation:pulse 2s infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}
-.chat-container{height:400px;overflow-y:auto;margin-bottom:12px;padding:12px;background:rgba(0,0,0,0.2);border-radius:10px}
-.chat-message{margin-bottom:12px;padding:8px 12px;border-radius:10px;max-width:80%}
-.chat-user{background:rgba(102,126,234,0.3);margin-left:auto;text-align:right}
-.chat-bot{background:rgba(255,255,255,0.1);margin-right:auto}
-.cast-screen{background:#000;border-radius:10px;padding:0;overflow:hidden}
-.cast-video{width:100%;max-height:500px;object-fit:contain}
-.file-list{max-height:400px;overflow-y:auto}
-.file-item{display:flex;align-items:center;gap:8px;padding:8px;border-bottom:1px solid rgba(255,255,255,0.1);cursor:pointer}
-.file-item:hover{background:rgba(255,255,255,0.1)}
+.status-bar{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+.status-item{background:rgba(255,255,255,0.08);backdrop-filter:blur(10px);padding:10px 18px;border-radius:30px;display:flex;align-items:center;gap:8px;border:1px solid rgba(255,255,255,0.1)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin-bottom:14px}
+.card{background:rgba(255,255,255,0.05);backdrop-filter:blur(10px);border-radius:18px;padding:18px;border:1px solid rgba(255,255,255,0.1)}
+h1{font-size:22px;margin-bottom:16px}
+h2{font-size:17px;margin-bottom:14px;opacity:0.9}
+.btn-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(75px,1fr));gap:8px}
+button{background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);color:#fff;padding:12px 10px;border-radius:12px;font-size:12px;font-weight:500;cursor:pointer;transition:all 0.2s;display:flex;flex-direction:column;align-items:center;gap:5px}
+button:hover{background:rgba(255,255,255,0.2);transform:translateY(-2px)}
+button svg{width:22px;height:22px;fill:currentColor}
+.input-group{display:flex;gap:8px;margin-top:12px}
+input,select,textarea{flex:1;padding:12px 14px;border:none;border-radius:12px;background:rgba(255,255,255,0.1);color:#fff;font-size:14px;border:1px solid rgba(255,255,255,0.15)}
+input::placeholder{color:rgba(255,255,255,0.5)}
+.log-container{background:rgba(0,0,0,0.3);border-radius:12px;padding:12px;max-height:280px;overflow-y:auto;font-family:monospace;font-size:11px}
+.log-entry{padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.08)}
+.log-time{color:#64b5f6}
+.log-success{color:#81c784}
+.log-error{color:#e57373}
+.log-system{color:#ffd54f}
+.log-command{color:#ba68c8}
+.chat-container{height:400px;overflow-y:auto;margin-bottom:14px;padding:14px;background:rgba(0,0,0,0.2);border-radius:14px;display:flex;flex-direction:column}
+.chat-message{margin-bottom:12px;padding:12px 16px;border-radius:18px;max-width:85%;word-break:break-word;animation:slideIn 0.3s ease}
+@keyframes slideIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.chat-user{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);margin-left:auto;border-bottom-right-radius:4px}
+.chat-bot{background:rgba(255,255,255,0.1);margin-right:auto;border-bottom-left-radius:4px}
+.chat-typing{display:inline-block;width:8px;height:8px;border-radius:50%;background:#fff;margin:0 2px;animation:typing 1.4s infinite}
+.chat-typing:nth-child(2){animation-delay:0.2s}
+.chat-typing:nth-child(3){animation-delay:0.4s}
+@keyframes typing{0%,60%,100%{opacity:0.3;transform:translateY(0)}30%{opacity:1;transform:translateY(-5px)}}
+.stream-container{background:#000;border-radius:16px;overflow:hidden;aspect-ratio:16/9}
+.stream-video{width:100%;height:100%;object-fit:contain}
+.file-list{max-height:450px;overflow-y:auto}
+.file-item{display:flex;align-items:center;gap:10px;padding:12px;border-bottom:1px solid rgba(255,255,255,0.08);cursor:pointer;transition:background 0.2s}
+.file-item:hover{background:rgba(255,255,255,0.08)}
+.search-result{background:rgba(255,255,255,0.05);border-radius:12px;padding:14px;margin-bottom:10px;cursor:pointer}
+.search-result:hover{background:rgba(255,255,255,0.1)}
+.connection-dot{width:10px;height:10px;border-radius:50%;background:#4ade80;animation:pulse 2s infinite}
 </style>
 </head><body>
 <div class="container">
-<div class="gateway-banner"><h2 style="margin-bottom:8px">🥹 Gateway Access URL</h2><div><span class="gateway-url" id="gatewayUrl">Loading...</span><button class="copy-btn" onclick="copyGatewayUrl()">📋 Copy</button></div><p style="margin-top:12px;opacity:0.9">Connect to this hotspot and open this URL</p></div>
+<div class="gateway-banner">
+<h2 style="margin-bottom:8px;font-size:18px">🥹 Gateway Access URL</h2>
+<div style="display:flex;align-items:center;flex-wrap:wrap;gap:10px">
+<span class="gateway-url" id="gatewayUrl">Loading...</span>
+<button class="copy-btn" onclick="copyGatewayUrl()">📋 Copy</button>
+</div>
+<p style="margin-top:12px;opacity:0.9;font-size:14px">Connect to this hotspot and open this URL</p>
+</div>
 
 <div class="nav-bar">
-<button class="nav-btn active" onclick="switchPage('main')">🏠 Main Control</button>
-<button class="nav-btn" onclick="switchPage('ai')">🤖 AI Agent</button>
-<button class="nav-btn" onclick="switchPage('search')">🔍 Web Search</button>
-<button class="nav-btn" onclick="switchPage('files')">📁 File Manager</button>
-<button class="nav-btn" onclick="switchPage('cast')">📺 Screen Cast</button>
+<button class="nav-btn active" onclick="switchPage('main')">🏠 Main</button>
+<button class="nav-btn" onclick="switchPage('ai')">🤖 AI</button>
+<button class="nav-btn" onclick="switchPage('search')">🔍 Search</button>
+<button class="nav-btn" onclick="switchPage('files')">📁 Files</button>
+<button class="nav-btn" onclick="switchPage('stream')">📺 Stream</button>
 <button class="nav-btn" onclick="switchPage('settings')">⚙️ Settings</button>
 </div>
 
 <div id="main-page" class="page active">
-<div class="devices-panel"><h3>📱 Connected Devices <span id="deviceCount">(0)</span></h3><div id="devicesList"><div class="device-item" style="justify-content:center;opacity:0.7">No devices connected</div></div></div>
-<div class="status-bar"><div class="status-item"><span class="connection-dot"></span><span id="connectionStatus">Connected</span></div><div class="status-item"><span id="deviceModel">Loading...</span></div><div class="status-item"><span id="batteryLevel">🔋 --%</span></div></div>
+<div class="devices-panel">
+<h3 style="margin-bottom:12px">📱 Connected Devices <span id="deviceCount">(0)</span></h3>
+<div id="devicesList"><div class="device-item" style="justify-content:center;opacity:0.7">No devices connected</div></div>
+</div>
+<div class="status-bar">
+<div class="status-item"><span class="connection-dot"></span><span id="connectionStatus">Connected</span></div>
+<div class="status-item"><span id="deviceModel">Loading...</span></div>
+<div class="status-item"><span id="batteryLevel">🔋 --%</span></div>
+</div>
 <div class="grid">
 <div class="card"><h2>📱 Navigation</h2><div class="btn-grid">
 <button onclick="send('home')"><svg viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>Home</button>
 <button onclick="send('back')"><svg viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>Back</button>
 <button onclick="send('recent')"><svg viewBox="0 0 24 24"><path d="M4 8h4V4H4v4zm6 12h4v-4h-4v4zm-6 0h4v-4H4v4zm0-6h4v-4H4v4zm6 0h4v-4h-4v4zm6-10v4h4V4h-4zm-6 4h4V4h-4v4zm6 6h4v-4h-4v4zm0 6h4v-4h-4v4z"/></svg>Recent</button>
-<button onclick="send('menu')"><svg viewBox="0 0 24 24"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>Menu</button>
+<button onclick="send('notification')"><svg viewBox="0 0 24 24"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>Notify</button>
+<button onclick="send('quick-settings')"><svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/></svg>Quick</button>
 </div></div>
-<div class="card"><h2>🔊 Media</h2><div class="btn-grid">
+<div class="card"><h2>🎮 Media</h2><div class="btn-grid">
 <button onclick="send('volume-up')"><svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3z"/></svg>Vol+</button>
 <button onclick="send('volume-down')"><svg viewBox="0 0 24 24"><path d="M18.5 12c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/></svg>Vol-</button>
 <button onclick="send('mute')"><svg viewBox="0 0 24 24"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63z"/></svg>Mute</button>
@@ -581,75 +805,115 @@ input::placeholder{color:rgba(255,255,255,0.5)}
 <button onclick="send('sleep')"><svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/></svg>Sleep</button>
 <button onclick="send('wake')"><svg viewBox="0 0 24 24"><path d="M20 12c0-4.41-3.59-8-8-8s-8 3.59-8 8 3.59 8 8 8 8-3.59 8-8z"/></svg>Wake</button>
 </div></div>
-<div class="card"><h2>📶 Connectivity</h2><div class="btn-grid">
-<button onclick="send('wifi on')"><svg viewBox="0 0 24 24"><path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.44 3.9 7.56 3.9 1 9z"/></svg>WiFi On</button>
-<button onclick="send('wifi off')"><svg viewBox="0 0 24 24"><path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.44 3.9 7.56 3.9 1 9z"/></svg>WiFi Off</button>
-<button onclick="send('hotspot on')"><svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/></svg>Hotspot On</button>
-<button onclick="send('hotspot off')"><svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/></svg>Hotspot Off</button>
-<button onclick="send('bluetooth on')"><svg viewBox="0 0 24 24"><path d="M17.71 7.71L12 2h-1v7.59L6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 11 14.41V22h1l5.71-5.71-4.3-4.29 4.3-4.29z"/></svg>BT On</button>
-<button onclick="send('bluetooth off')"><svg viewBox="0 0 24 24"><path d="M17.71 7.71L12 2h-1v7.59L6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 11 14.41V22h1l5.71-5.71-4.3-4.29 4.3-4.29z"/></svg>BT Off</button>
+<div class="card"><h2>📶 Network</h2><div class="btn-grid">
+<button onclick="send('wifi on')">📶 WiFi On</button>
+<button onclick="send('wifi off')">📴 WiFi Off</button>
+<button onclick="send('hotspot on')">🔥 Hotspot On</button>
+<button onclick="send('hotspot off')">❄️ Hotspot Off</button>
+<button onclick="send('bluetooth on')">🔵 BT On</button>
+<button onclick="send('bluetooth off')">⚪ BT Off</button>
 </div></div>
 </div>
 <div class="grid">
-<div class="card"><h2>🎯 Touch Control</h2><div class="input-group"><input type="number" id="tapX" placeholder="X" value="500"><input type="number" id="tapY" placeholder="Y" value="500"><button onclick="send('tap '+tapX.value+' '+tapY.value)">Tap</button></div>
-<div class="input-group"><input type="text" id="textInput" placeholder="Type text..."><button onclick="send('text '+textInput.value);textInput.value=''">Type</button></div>
+<div class="card"><h2>📱 Apps</h2><div class="btn-grid">
+<button onclick="send('open-tiktok')">TikTok</button>
+<button onclick="send('open-facebook')">Facebook</button>
+<button onclick="send('open-instagram')">Instagram</button>
+<button onclick="send('open-twitter')">Twitter</button>
+<button onclick="send('open-whatsapp')">WhatsApp</button>
+<button onclick="send('open-telegram')">Telegram</button>
+<button onclick="send('open-spotify')">Spotify</button>
+<button onclick="send('open-netflix')">Netflix</button>
+<button onclick="send('open-chrome')">Chrome</button>
+<button onclick="send('open-camera')">Camera</button>
+</div></div>
+<div class="card"><h2>🎯 Input</h2><div class="input-group">
+<input type="number" id="tapX" placeholder="X" value="500" style="width:80px">
+<input type="number" id="tapY" placeholder="Y" value="500" style="width:80px">
+<button onclick="send('tap '+tapX.value+' '+tapY.value)">Tap</button>
 </div>
-<div class="card"><h2>📸 Camera & Media</h2><div class="btn-grid">
-<button onclick="send('open-camera')"><svg viewBox="0 0 24 24"><path d="M9 3L7.17 5H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2h-3.17L15 3H9z"/></svg>Camera</button>
-<button onclick="send('open-video')"><svg viewBox="0 0 24 24"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>Video</button>
-<button onclick="send('open-gallery')"><svg viewBox="0 0 24 24"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2z"/></svg>Gallery</button>
-<button onclick="send('open-music')"><svg viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>Music</button>
+<div class="input-group">
+<input type="text" id="textInput" placeholder="Type text...">
+<button onclick="typeWithAnimation(textInput.value)">Type</button>
 </div></div>
 </div>
-<div class="card"><h2>📝 Command Log</h2><div class="input-group"><input type="text" id="customCommand" placeholder="Enter command..."><button onclick="send(customCommand.value);customCommand.value=''">Execute</button></div><div class="log-container" id="logContainer"></div></div>
+<div class="card"><h2>📝 Command Log</h2>
+<div class="input-group">
+<input type="text" id="customCommand" placeholder="Enter command...">
+<button onclick="send(customCommand.value);customCommand.value=''">Execute</button>
+</div>
+<div class="log-container" id="logContainer"></div>
+</div>
 </div>
 
 <div id="ai-page" class="page">
 <div class="grid">
-<div class="card"><h2>🤖 AI Agent Mode</h2><div class="btn-grid" style="margin-bottom:12px"><button class="nav-btn active" onclick="setAIMode('chat')">💬 Chat Mode</button><button class="nav-btn" onclick="setAIMode('action')">⚡ Action Mode</button></div>
+<div class="card"><h2>🤖 AI Agent</h2>
+<div class="btn-grid" style="margin-bottom:15px">
+<button class="nav-btn active" onclick="setAIMode('chat')">💬 Chat</button>
+<button class="nav-btn" onclick="setAIMode('action')">⚡ Action</button>
+<button class="nav-btn" onclick="setAIMode('search')">🔍 Search</button>
+</div>
 <div class="chat-container" id="chatContainer"></div>
-<div class="input-group"><input type="text" id="aiInput" placeholder="Ask me anything..."><button onclick="sendAIMessage()">Send</button></div></div>
+<div class="input-group">
+<input type="text" id="aiInput" placeholder="Ask me anything..." onkeypress="if(event.key==='Enter')sendAIMessage()">
+<button onclick="sendAIMessage()">Send</button>
+</div>
+<div style="margin-top:12px">
+<button onclick="speechToText()" style="width:100%">🎤 Voice Input</button>
+</div>
+</div>
 </div>
 </div>
 
 <div id="search-page" class="page">
-<div class="card"><h2>🔍 DuckDuckGo Web Search</h2><div class="input-group"><input type="text" id="searchInput" placeholder="Search the web..."><button onclick="webSearch()">Search</button></div><div id="searchResult" style="margin-top:12px;max-height:500px;overflow-y:auto;font-size:14px;white-space:pre-wrap"></div></div>
+<div class="card"><h2>🔍 Web Search</h2>
+<div class="input-group">
+<input type="text" id="searchInput" placeholder="Search the web..." onkeypress="if(event.key==='Enter')webSearch()">
+<button onclick="webSearch()">Search</button>
+</div>
+<div id="searchResults" style="margin-top:15px"></div>
+</div>
 </div>
 
 <div id="files-page" class="page">
-<div class="card"><h2>📁 File Manager</h2><div class="input-group"><input type="text" id="currentPath" value="/sdcard" placeholder="Path"><button onclick="loadFiles(currentPath.value)">Browse</button></div><div class="file-list" id="fileList"></div></div>
+<div class="card"><h2>📁 File Manager</h2>
+<div class="input-group">
+<input type="text" id="currentPath" value="/" placeholder="Path">
+<button onclick="loadFiles(currentPath.value)">Browse</button>
+<button onclick="loadFiles('/sdcard')">📱 SDCard</button>
+<button onclick="loadFiles('/data/data/com.termux/files/home')">📂 Termux</button>
+</div>
+<div class="file-list" id="fileList"></div>
+</div>
 </div>
 
-<div id="cast-page" class="page">
-<div class="card"><h2>📺 Screen Cast</h2><div class="btn-grid" style="margin-bottom:12px"><button onclick="startCast()">▶️ Start Casting</button><button onclick="stopCast()">⏹️ Stop Casting</button></div>
-<div class="cast-screen"><video id="castVideo" class="cast-video" autoplay muted playsinline></video></div>
-<div id="castUrl" style="margin-top:12px;font-family:monospace"></div></div>
+<div id="stream-page" class="page">
+<div class="card"><h2>📺 Screen Stream</h2>
+<div class="btn-grid" style="margin-bottom:15px">
+<button onclick="startStream()">▶️ Start Streaming</button>
+<button onclick="stopStream()">⏹️ Stop Streaming</button>
+</div>
+<div class="stream-container">
+<video id="streamVideo" class="stream-video" autoplay muted playsinline></video>
+</div>
+<div id="streamUrl" style="margin-top:15px;font-family:monospace;word-break:break-all"></div>
+</div>
 </div>
 
 <div id="settings-page" class="page">
 <div class="grid">
-<div class="card"><h2>⚙️ System Settings</h2><div class="btn-grid">
-<button onclick="send('open-settings')">Main Settings</button>
+<div class="card"><h2>⚙️ System</h2><div class="btn-grid">
+<button onclick="send('open-settings')">Settings</button>
 <button onclick="send('open-wifi-settings')">WiFi</button>
 <button onclick="send('open-bluetooth-settings')">Bluetooth</button>
 <button onclick="send('open-app-settings')">Apps</button>
-<button onclick="send('open-developer-settings')">Developer</button>
 <button onclick="send('open-display-settings')">Display</button>
 <button onclick="send('open-sound-settings')">Sound</button>
 <button onclick="send('open-storage-settings')">Storage</button>
 <button onclick="send('open-battery-settings')">Battery</button>
 <button onclick="send('open-security-settings')">Security</button>
-<button onclick="send('open-accounts-settings')">Accounts</button>
-<button onclick="send('open-language-settings')">Language</button>
-<button onclick="send('open-date-settings')">Date & Time</button>
-<button onclick="send('open-accessibility-settings')">Accessibility</button>
-<button onclick="send('open-print-settings')">Print</button>
-<button onclick="send('open-vpn-settings')">VPN</button>
-<button onclick="send('open-nfc-settings')">NFC</button>
-</div></div>
-<div class="card"><h2>🔓 Unlock Methods</h2><div class="btn-grid">
-<button onclick="send('pattern-lock')">Pattern Unlock</button>
-<button onclick="sendPin()">PIN Unlock</button>
+<button onclick="send('open-developer-settings')">Developer</button>
 </div></div>
 <div class="card"><h2>📊 Device Info</h2><div id="deviceInfo"></div></div>
 </div>
@@ -658,204 +922,343 @@ input::placeholder{color:rgba(255,255,255,0.5)}
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
-const socket=io();
-let currentPage='main';
-let currentAIMode='chat';
+const socket = io({transports: ['websocket', 'polling']});
+let currentPage = 'main';
+let currentAIMode = 'chat';
+let typingInterval = null;
 
-function switchPage(page){
-document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
-document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
-document.getElementById(page+'-page').classList.add('active');
-event.target.classList.add('active');
-currentPage=page;
-if(page==='cast')checkCastStatus();
-if(page==='settings')loadDeviceInfo();
+function switchPage(page) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById(page + '-page').classList.add('active');
+    event.target.classList.add('active');
+    currentPage = page;
+    if (page === 'stream') checkStreamStatus();
+    if (page === 'settings') loadDeviceInfo();
 }
 
-function setAIMode(mode){
-currentAIMode=mode;
-document.querySelectorAll('#ai-page .nav-btn').forEach(b=>b.classList.remove('active'));
-event.target.classList.add('active');
+function setAIMode(mode) {
+    currentAIMode = mode;
+    document.querySelectorAll('#ai-page .nav-btn').forEach(b => b.classList.remove('active'));
+    event.target.classList.add('active');
 }
 
-async function sendAIMessage(){
-const input=document.getElementById('aiInput');
-const message=input.value.trim();
-if(!message)return;
-addChatMessage('user',message);
-input.value='';
-try{
-const res=await fetch('/api/ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt:message,mode:currentAIMode})});
-const data=await res.json();
-if(data.success){
-if(data.mode==='chat'){addChatMessage('bot',data.response);}
-else{addChatMessage('bot','✅ '+data.command+'\n'+data.result);}
-}else{addChatMessage('bot','❌ '+data.message);}
-}catch(e){addChatMessage('bot','❌ Error');}
+async function sendAIMessage() {
+    const input = document.getElementById('aiInput');
+    const message = input.value.trim();
+    if (!message) return;
+    
+    addChatMessage('user', message);
+    input.value = '';
+    
+    const typingId = showTyping();
+    
+    try {
+        const res = await fetch('/api/ai', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({prompt: message, mode: currentAIMode})
+        });
+        const data = await res.json();
+        
+        removeTyping(typingId);
+        
+        if (data.success) {
+            if (data.mode === 'chat') {
+                typeResponse(data.response);
+            } else if (data.mode === 'search') {
+                addChatMessage('bot', `🔍 Searching: ${data.query}`);
+                displaySearchResults(data.results);
+            } else {
+                addChatMessage('bot', `✅ ${data.command}\n${data.result || 'Done'}`);
+            }
+        } else {
+            addChatMessage('bot', `❌ ${data.message}`);
+        }
+    } catch(e) {
+        removeTyping(typingId);
+        addChatMessage('bot', '❌ Connection error');
+    }
 }
 
-function addChatMessage(role,text){
-const container=document.getElementById('chatContainer');
-const div=document.createElement('div');
-div.className='chat-message chat-'+role;
-div.textContent=text;
-container.appendChild(div);
-container.scrollTop=container.scrollHeight;
+function typeResponse(text) {
+    const container = document.getElementById('chatContainer');
+    const div = document.createElement('div');
+    div.className = 'chat-message chat-bot';
+    div.id = 'typing-' + Date.now();
+    container.appendChild(div);
+    
+    let i = 0;
+    const interval = setInterval(() => {
+        if (i < text.length) {
+            div.textContent += text[i];
+            i++;
+            container.scrollTop = container.scrollHeight;
+        } else {
+            clearInterval(interval);
+        }
+    }, 30);
 }
 
-async function webSearch(){
-const input=document.getElementById('searchInput');
-const query=input.value.trim();
-if(!query)return;
-addLog({timestamp:new Date().toISOString(),type:'system',message:'Search: '+query});
-try{
-const res=await fetch('/api/search',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query})});
-const data=await res.json();
-document.getElementById('searchResult').textContent=data.result;
-}catch(e){document.getElementById('searchResult').textContent='Search failed';}
+function addChatMessage(role, text) {
+    const container = document.getElementById('chatContainer');
+    const div = document.createElement('div');
+    div.className = 'chat-message chat-' + role;
+    div.textContent = text;
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
 }
 
-async function loadFiles(path){
-try{
-const res=await fetch('/api/files?path='+encodeURIComponent(path));
-const data=await res.json();
-const list=document.getElementById('fileList');
-list.innerHTML='';
-if(data.files){
-data.files.split('\n').forEach(f=>{
-if(!f)return;
-const div=document.createElement('div');
-div.className='file-item';
-div.innerHTML='<span>📄 '+f+'</span>';
-div.onclick=()=>{
-const newPath=path+'/'+f;
-document.getElementById('currentPath').value=newPath;
-loadFiles(newPath);
-};
-list.appendChild(div);
+function showTyping() {
+    const container = document.getElementById('chatContainer');
+    const div = document.createElement('div');
+    div.className = 'chat-message chat-bot';
+    div.id = 'typing-indicator';
+    div.innerHTML = '<span class="chat-typing"></span><span class="chat-typing"></span><span class="chat-typing"></span>';
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
+    return div.id;
+}
+
+function removeTyping(id) {
+    const el = document.getElementById('typing-indicator');
+    if (el) el.remove();
+}
+
+function displaySearchResults(results) {
+    const container = document.getElementById('searchResults');
+    if (!results || results.length === 0) {
+        container.innerHTML = '<p style="opacity:0.7">No results found</p>';
+        return;
+    }
+    
+    container.innerHTML = results.map(r => `
+        <div class="search-result" onclick="window.open('https://${r.link}', '_blank')">
+            <div style="font-weight:bold;margin-bottom:5px">${r.title}</div>
+            <div style="font-size:12px;opacity:0.7;margin-bottom:5px">${r.link}</div>
+            <div style="font-size:13px">${r.snippet}</div>
+        </div>
+    `).join('');
+}
+
+async function webSearch() {
+    const input = document.getElementById('searchInput');
+    const query = input.value.trim();
+    if (!query) return;
+    
+    addLog({timestamp: new Date().toISOString(), type: 'system', message: 'Search: ' + query});
+    
+    try {
+        const res = await fetch('/api/search', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({query})
+        });
+        const data = await res.json();
+        displaySearchResults(data.results);
+    } catch(e) {
+        document.getElementById('searchResults').innerHTML = '<p>Search failed</p>';
+    }
+}
+
+async function loadFiles(path) {
+    try {
+        const res = await fetch('/api/files?path=' + encodeURIComponent(path));
+        const data = await res.json();
+        document.getElementById('currentPath').value = data.path;
+        
+        const list = document.getElementById('fileList');
+        list.innerHTML = '';
+        
+        if (path !== '/') {
+            const parent = path.split('/').slice(0, -1).join('/') || '/';
+            const div = document.createElement('div');
+            div.className = 'file-item';
+            div.innerHTML = '<span>📁 ..</span>';
+            div.onclick = () => loadFiles(parent);
+            list.appendChild(div);
+        }
+        
+        if (data.files) {
+            data.files.split('\n').forEach(f => {
+                if (!f.trim()) return;
+                const parts = f.trim().split(/\s+/);
+                if (parts.length < 9) return;
+                
+                const perms = parts[0];
+                const name = parts.slice(8).join(' ');
+                if (name === '.' || name === '..') return;
+                
+                const isDir = perms.startsWith('d');
+                const div = document.createElement('div');
+                div.className = 'file-item';
+                div.innerHTML = `<span>${isDir ? '📁' : '📄'} ${name}</span>`;
+                div.onclick = () => {
+                    if (isDir) {
+                        loadFiles(path + '/' + name);
+                    }
+                };
+                list.appendChild(div);
+            });
+        }
+    } catch(e) {
+        console.error(e);
+    }
+}
+
+async function startStream() {
+    try {
+        const res = await fetch('/api/stream/start', {method: 'POST'});
+        const data = await res.json();
+        if (data.success) {
+            document.getElementById('streamUrl').textContent = 'Stream URL: ' + data.url;
+            const video = document.getElementById('streamVideo');
+            video.src = data.url;
+            video.play().catch(() => {});
+        }
+    } catch(e) {}
+}
+
+async function stopStream() {
+    try {
+        await fetch('/api/stream/stop', {method: 'POST'});
+        document.getElementById('streamUrl').textContent = '';
+        const video = document.getElementById('streamVideo');
+        video.pause();
+        video.src = '';
+    } catch(e) {}
+}
+
+async function checkStreamStatus() {
+    try {
+        const res = await fetch('/api/stream/status');
+        const data = await res.json();
+        if (data.active) {
+            document.getElementById('streamUrl').textContent = 'Stream URL: ' + data.url;
+            const video = document.getElementById('streamVideo');
+            if (video.src !== data.url) {
+                video.src = data.url;
+                video.play().catch(() => {});
+            }
+        }
+    } catch(e) {}
+}
+
+async function loadDeviceInfo() {
+    try {
+        const res = await fetch('/api/device');
+        const data = await res.json();
+        const info = data.info.split('\n');
+        document.getElementById('deviceInfo').innerHTML = `
+            <p>📱 ${info[2] || 'Unknown'}</p>
+            <p>📱 Android ${info[1] || 'Unknown'}</p>
+            <p>🔋 ${data.battery}</p>
+            <p>💾 ${data.memory}</p>
+            <p>💿 ${data.storage}</p>
+        `;
+    } catch(e) {}
+}
+
+function typeWithAnimation(text) {
+    if (!text) return;
+    send('text ' + text);
+    document.getElementById('textInput').value = '';
+}
+
+function send(cmd) {
+    socket.emit('command', cmd);
+    addLog({timestamp: new Date().toISOString(), type: 'command', message: cmd});
+}
+
+function addLog(l) {
+    const container = document.getElementById('logContainer');
+    const div = document.createElement('div');
+    div.className = 'log-entry';
+    div.innerHTML = `<span class="log-time">[${new Date(l.timestamp).toLocaleTimeString()}]</span> <span class="log-${l.type}">${l.message}</span>`;
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
+    if (container.children.length > 50) {
+        container.removeChild(container.children[0]);
+    }
+}
+
+async function copyGatewayUrl() {
+    const url = document.getElementById('gatewayUrl').textContent;
+    try {
+        await navigator.clipboard.writeText(url);
+        alert('Gateway URL copied!');
+    } catch(e) {
+        prompt('Copy this URL:', url);
+    }
+}
+
+function speechToText() {
+    if ('webkitSpeechRecognition' in window) {
+        const recognition = new webkitSpeechRecognition();
+        recognition.lang = 'en-US';
+        recognition.onresult = (e) => {
+            document.getElementById('aiInput').value = e.results[0][0].transcript;
+            sendAIMessage();
+        };
+        recognition.start();
+    } else {
+        alert('Speech recognition not supported');
+    }
+}
+
+socket.on('connect', () => {
+    document.getElementById('connectionStatus').textContent = 'Connected';
+    socket.emit('getLogs');
+    socket.emit('getGateway');
+    loadMainInfo();
 });
-}
-}catch(e){}
-}
 
-let castActive=false;
-
-async function startCast(){
-try{
-const res=await fetch('/api/cast/start',{method:'POST'});
-const data=await res.json();
-if(data.success){
-castActive=true;
-document.getElementById('castUrl').textContent='Cast URL: '+data.url;
-const video=document.getElementById('castVideo');
-video.src=data.url;
-video.play().catch(()=>{});
-}else{alert('Cast failed');}
-}catch(e){alert('Cast error');}
-}
-
-async function stopCast(){
-try{
-await fetch('/api/cast/stop',{method:'POST'});
-castActive=false;
-document.getElementById('castUrl').textContent='';
-const video=document.getElementById('castVideo');
-video.pause();
-video.src='';
-}catch(e){}
-}
-
-async function checkCastStatus(){
-try{
-const res=await fetch('/api/cast/status');
-const data=await res.json();
-castActive=data.active;
-if(data.active){
-document.getElementById('castUrl').textContent='Cast URL: '+data.url;
-const video=document.getElementById('castVideo');
-if(video.src!==data.url){
-video.src=data.url;
-video.play().catch(()=>{});
-}
-}
-}catch(e){}
-}
-
-async function loadDeviceInfo(){
-try{
-const res=await fetch('/api/device');
-const data=await res.json();
-document.getElementById('deviceInfo').innerHTML='<p>Model: '+(data.info.split('\n')[2]||'Unknown')+'</p><p>Android: '+(data.info.split('\n')[1]||'Unknown')+'</p><p>Battery: '+data.battery+'</p><p>Memory: '+data.memory+'</p>';
-}catch(e){}
-}
-
-function sendPin(){
-const pin=prompt('Enter PIN:');
-if(pin)send('pin-unlock '+pin);
-}
-
-function send(cmd){socket.emit('command',cmd);}
-
-function addLog(l){
-const container=document.getElementById('logContainer');
-const d=document.createElement('div');
-d.className='log-entry';
-d.innerHTML='<span class="log-time">['+new Date(l.timestamp).toLocaleTimeString()+']</span> <span class="log-'+l.type+'">'+(l.device?'['+l.device.ip+'] ':'')+l.message+'</span>';
-container.appendChild(d);
-container.scrollTop=container.scrollHeight;
-}
-
-async function copyGatewayUrl(){
-const url=document.getElementById('gatewayUrl').textContent;
-await navigator.clipboard.writeText(url);
-alert('Gateway URL copied!');
-}
-
-socket.on('connect',()=>{
-document.getElementById('connectionStatus').textContent='Connected';
-socket.emit('getLogs');
-socket.emit('getGateway');
-loadMainInfo();
+socket.on('log', addLog);
+socket.on('logs', logs => {
+    document.getElementById('logContainer').innerHTML = '';
+    logs.reverse().forEach(addLog);
+});
+socket.on('commandResult', d => {
+    addLog({timestamp: new Date().toISOString(), type: 'success', message: d.command + ': ' + d.result});
+});
+socket.on('gatewayInfo', info => {
+    document.getElementById('gatewayUrl').textContent = info.url;
+});
+socket.on('devicesUpdate', devices => {
+    document.getElementById('deviceCount').textContent = '(' + devices.length + ')';
+    document.getElementById('devicesList').innerHTML = devices.length ? 
+        devices.map(d => `<div class="device-item"><span class="device-online"></span><span style="flex:1">${d.ip}</span><span style="font-size:11px;opacity:0.5">${new Date(d.connectedAt).toLocaleTimeString()}</span></div>`).join('') :
+        '<div class="device-item" style="justify-content:center;opacity:0.7">No devices connected</div>';
+});
+socket.on('streamStatus', status => {
+    if (status.active) {
+        document.getElementById('streamUrl').textContent = 'Stream URL: ' + status.url;
+        const video = document.getElementById('streamVideo');
+        if (video.src !== status.url) {
+            video.src = status.url;
+            video.play().catch(() => {});
+        }
+    } else {
+        document.getElementById('streamUrl').textContent = '';
+        const video = document.getElementById('streamVideo');
+        video.pause();
+        video.src = '';
+    }
 });
 
-socket.on('log',addLog);
-socket.on('logs',logs=>{document.getElementById('logContainer').innerHTML='';logs.reverse().forEach(addLog);});
-socket.on('commandResult',d=>{addLog({timestamp:new Date().toISOString(),type:'success',message:d.command+': '+d.result});});
-socket.on('gatewayInfo',info=>{document.getElementById('gatewayUrl').textContent=info.url;});
-socket.on('devicesUpdate',devices=>{
-document.getElementById('deviceCount').textContent='('+devices.length+')';
-document.getElementById('devicesList').innerHTML=devices.length?devices.map(d=>'<div class="device-item"><span class="device-online"></span><span style="flex:1">'+d.ip+'</span><span style="font-size:11px;opacity:0.5">'+new Date(d.connectedAt).toLocaleTimeString()+'</span></div>').join(''):'<div class="device-item" style="justify-content:center;opacity:0.7">No devices connected</div>';
-});
-socket.on('castStatus',status=>{
-castActive=status.active;
-if(status.active){
-document.getElementById('castUrl').textContent='Cast URL: '+status.url;
-const video=document.getElementById('castVideo');
-if(video.src!==status.url){
-video.src=status.url;
-video.play().catch(()=>{});
-}
-}else{
-document.getElementById('castUrl').textContent='';
-const video=document.getElementById('castVideo');
-video.pause();
-video.src='';
-}
-});
-
-async function loadMainInfo(){
-try{
-const r=await fetch('/api/device');
-const d=await r.json();
-const i=d.info.split('\n');
-document.getElementById('deviceModel').textContent=(i[2]||'Android')+' '+(i[1]||'');
-const b=d.battery.match(/level: (\d+)/);
-if(b)document.getElementById('batteryLevel').textContent='🔋 '+b[1]+'%';
-}catch(e){}
+async function loadMainInfo() {
+    try {
+        const r = await fetch('/api/device');
+        const d = await r.json();
+        const i = d.info.split('\n');
+        document.getElementById('deviceModel').textContent = (i[2] || 'Android') + ' ' + (i[1] || '');
+        const b = d.battery.match(/level: (\d+)/);
+        if (b) document.getElementById('batteryLevel').textContent = '🔋 ' + b[1] + '%';
+    } catch(e) {}
 }
 
-setInterval(loadMainInfo,30000);
-setInterval(checkCastStatus,5000);
+setInterval(loadMainInfo, 30000);
+setInterval(checkStreamStatus, 5000);
 loadMainInfo();
 </script>
 </body></html>
@@ -865,7 +1268,7 @@ mkdir -p ~/.termux/boot
 cat > ~/.termux/boot/start-phone-server << EOF
 #!/data/data/com.termux/files/usr/bin/bash
 cd $SYSTEM_DIR/server
-npm install --silent express socket.io fluent-ffmpeg duck-duck-scrape 2>/dev/null
+npm install --silent 2>/dev/null
 node server.js > /dev/null 2>&1 &
 EOF
 chmod +x ~/.termux/boot/start-phone-server
