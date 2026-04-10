@@ -72,131 +72,153 @@ SHIZUKU_EOF
     bash "$SHIZUKU_DIR/copy.sh" </dev/null 2>/dev/null
 fi
 
-cat > ~/phone_control.sh << 'EOF'
+SYSTEM_DIR="$HOME/phone_control_system"
+mkdir -p "$SYSTEM_DIR"/{scripts,server,logs}
+cd "$SYSTEM_DIR"
+
+cat > scripts/phone_control.sh << 'EOF'
 #!/data/data/com.termux/files/usr/bin/bash
-CMD="$1"
-shift
+export PATH="$PATH:/data/data/com.termux/files/usr/bin"
+
 run_cmd() {
-  if command -v rish &>/dev/null; then rish -c "$@" 2>/dev/null
-  elif command -v adb &>/dev/null && adb get-state 1>/dev/null 2>&1; then adb shell "$@" 2>/dev/null
-  else echo "❌ Shizuku not connected"; exit 1; fi
+    if command -v rish &>/dev/null; then
+        rish -c "$*" 2>/dev/null
+    elif command -v adb &>/dev/null && adb get-state 1>/dev/null 2>&1; then
+        adb shell "$*" 2>/dev/null
+    else
+        echo "Shizuku/ADB not connected"
+        return 1
+    fi
 }
+
+CMD="$1"
+shift 2>/dev/null || true
+
 case "$CMD" in
-  screenshot) run_cmd "screencap -p '${1:-/sdcard/screenshot.png}'" ;;
-  open-app) run_cmd "monkey -p $1 1" 2>/dev/null ;;
-  youtube-search) QUERY=$(echo "$*" | sed 's/ /+/g'); run_cmd "am start -a android.intent.action.VIEW -d 'https://www.youtube.com/results?search_query=$QUERY'" ;;
-  open-url) run_cmd "am start -a android.intent.action.VIEW -d '$1'" ;;
-  wifi) if [ "$1" = "on" ]; then run_cmd "svc wifi enable"; else run_cmd "svc wifi disable"; fi ;;
-  hotspot) if [ "$1" = "on" ]; then run_cmd "svc wifi disable; cmd wifi start-softap"; else run_cmd "cmd wifi stop-softap"; fi ;;
-  bluetooth) if [ "$1" = "on" ]; then run_cmd "svc bluetooth enable"; else run_cmd "svc bluetooth disable"; fi ;;
-  nfc) if [ "$1" = "on" ]; then run_cmd "svc nfc enable"; else run_cmd "svc nfc disable"; fi ;;
-  airplane) if [ "$1" = "on" ]; then run_cmd "settings put global airplane_mode_on 1; am broadcast -a android.intent.action.AIRPLANE_MODE"; else run_cmd "settings put global airplane_mode_on 0; am broadcast -a android.intent.action.AIRPLANE_MODE"; fi ;;
-  mobile-data) if [ "$1" = "on" ]; then run_cmd "svc data enable"; else run_cmd "svc data disable"; fi ;;
-  location) if [ "$1" = "on" ]; then run_cmd "settings put secure location_mode 3"; else run_cmd "settings put secure location_mode 0"; fi ;;
-  battery) run_cmd "dumpsys battery" | grep -E "level|temperature|voltage|status" ;;
-  battery-saver) if [ "$1" = "on" ]; then run_cmd "settings put global low_power 1"; else run_cmd "settings put global low_power 0"; fi ;;
-  brightness) run_cmd "settings put system screen_brightness $1" ;;
-  volume) run_cmd "media volume --stream $1 --set $2" ;;
-  tap) run_cmd "input tap $1 $2" ;;
-  swipe) run_cmd "input swipe $1 $2 $3 $4 ${5:-500}" ;;
-  text) run_cmd "input text '$*'" ;;
-  key) run_cmd "input keyevent $1" ;;
-  home) run_cmd "input keyevent 3" ;;
-  back) run_cmd "input keyevent 4" ;;
-  recent) run_cmd "input keyevent 187" ;;
-  power) run_cmd "input keyevent 26" ;;
-  menu) run_cmd "input keyevent 82" ;;
-  volume-up) run_cmd "input keyevent 24" ;;
-  volume-down) run_cmd "input keyevent 25" ;;
-  mute) run_cmd "input keyevent 164" ;;
-  play-pause) run_cmd "input keyevent 85" ;;
-  next) run_cmd "input keyevent 87" ;;
-  previous) run_cmd "input keyevent 88" ;;
-  screen-on) run_cmd "input keyevent 224" ;;
-  screen-off) run_cmd "input keyevent 223" ;;
-  camera) run_cmd "input keyevent 27" ;;
-  notification) run_cmd "cmd statusbar expand-notifications" ;;
-  quick-settings) run_cmd "cmd statusbar expand-settings" ;;
-  sleep) run_cmd "input keyevent 26" ;;
-  wake) run_cmd "input keyevent 224; input keyevent 82" ;;
-  reboot) run_cmd "reboot" ;;
-  lock) run_cmd "am start -a android.app.action.SET_NEW_PASSWORD" ;;
-  device-info) run_cmd "getprop ro.product.model; getprop ro.build.version.release; getprop ro.product.manufacturer" ;;
-  memory) run_cmd "dumpsys meminfo" | grep -E "Total RAM|Free RAM" ;;
-  storage) run_cmd "df -h /data" ;;
-  processes) run_cmd "ps -A | head -30" ;;
-  kill-app) run_cmd "am force-stop $1" ;;
-  uninstall-app) run_cmd "pm uninstall $1" ;;
-  list-apps) run_cmd "pm list packages -3 | cut -d: -f2" ;;
-  pattern-lock) run_cmd "input keyevent 26; input keyevent 82; input swipe 200 800 600 800 100; input swipe 600 800 600 1200 100; input swipe 600 1200 200 1200 100; input swipe 200 1200 200 1600 100" ;;
-  pin-unlock) run_cmd "input text '$1'; input keyevent 66" ;;
-  password-unlock) run_cmd "input text '$1'; input keyevent 66" ;;
-  open-camera) run_cmd "am start -a android.media.action.IMAGE_CAPTURE" ;;
-  open-video) run_cmd "am start -a android.media.action.VIDEO_CAPTURE" ;;
-  open-gallery) run_cmd "am start -a android.intent.action.VIEW -d content://media/external/images/media -t image/*" ;;
-  open-music) run_cmd "am start -a android.intent.action.VIEW -d content://media/external/audio/media -t audio/*" ;;
-  open-files) run_cmd "am start -a android.intent.action.VIEW -d content://com.android.externalstorage.documents/root" ;;
-  open-settings) run_cmd "am start -a android.settings.SETTINGS" ;;
-  open-wifi-settings) run_cmd "am start -a android.settings.WIFI_SETTINGS" ;;
-  open-bluetooth-settings) run_cmd "am start -a android.settings.BLUETOOTH_SETTINGS" ;;
-  open-app-settings) run_cmd "am start -a android.settings.APPLICATION_SETTINGS" ;;
-  open-developer-settings) run_cmd "am start -a android.settings.APPLICATION_DEVELOPMENT_SETTINGS" ;;
-  open-display-settings) run_cmd "am start -a android.settings.DISPLAY_SETTINGS" ;;
-  open-sound-settings) run_cmd "am start -a android.settings.SOUND_SETTINGS" ;;
-  open-storage-settings) run_cmd "am start -a android.settings.INTERNAL_STORAGE_SETTINGS" ;;
-  open-battery-settings) run_cmd "am start -a android.intent.action.POWER_USAGE_SUMMARY" ;;
-  open-security-settings) run_cmd "am start -a android.settings.SECURITY_SETTINGS" ;;
-  open-accounts-settings) run_cmd "am start -a android.settings.SYNC_SETTINGS" ;;
-  open-language-settings) run_cmd "am start -a android.settings.LOCALE_SETTINGS" ;;
-  open-date-settings) run_cmd "am start -a android.settings.DATE_SETTINGS" ;;
-  open-accessibility-settings) run_cmd "am start -a android.settings.ACCESSIBILITY_SETTINGS" ;;
-  open-print-settings) run_cmd "am start -a android.settings.PRINT_SETTINGS" ;;
-  open-vpn-settings) run_cmd "am start -a android.net.vpn.SETTINGS" ;;
-  open-nfc-settings) run_cmd "am start -a android.settings.NFC_SETTINGS" ;;
-  take-photo) run_cmd "am start -a android.media.action.IMAGE_CAPTURE; sleep 2; input keyevent 27; input keyevent 27" ;;
-  record-video) run_cmd "am start -a android.media.action.VIDEO_CAPTURE; sleep 2; input keyevent 27; sleep 5; input keyevent 27" ;;
-  play-media) run_cmd "am start -a android.intent.action.VIEW -d '$1' -t video/*" ;;
-  open-contacts) run_cmd "am start -a android.intent.action.VIEW content://contacts/people" ;;
-  open-calendar) run_cmd "am start -a android.intent.action.VIEW content://com.android.calendar" ;;
-  open-calculator) run_cmd "am start -a android.intent.action.MAIN -n com.android.calculator2/.Calculator" ;;
-  open-clock) run_cmd "am start -a android.intent.action.MAIN -n com.android.deskclock/.DeskClock" ;;
-  open-messages) run_cmd "am start -a android.intent.action.MAIN -n com.google.android.apps.messaging/.ui.ConversationListActivity" ;;
-  open-phone) run_cmd "am start -a android.intent.action.MAIN -n com.android.dialer/.DialtactsActivity" ;;
-  open-chrome) run_cmd "am start -a android.intent.action.MAIN -n com.android.chrome/.Main" ;;
-  open-playstore) run_cmd "am start -a android.intent.action.VIEW -d market://details?id=$1" ;;
-  install-apk) run_cmd "pm install -r $1" ;;
-  uninstall-package) run_cmd "pm uninstall $1" ;;
-  clear-cache) run_cmd "pm clear $1" ;;
-  force-stop) run_cmd "am force-stop $1" ;;
-  start-service) run_cmd "am startservice $1" ;;
-  stop-service) run_cmd "am stopservice $1" ;;
-  broadcast) run_cmd "am broadcast -a $1" ;;
-  get-clipboard) run_cmd "cmd clipboard get-text" 2>/dev/null ;;
-  set-clipboard) run_cmd "cmd clipboard set-text '$*'" 2>/dev/null ;;
-  file-list) run_cmd "ls -la $1" ;;
-  file-read) run_cmd "cat $1" ;;
-  file-delete) run_cmd "rm -rf $1" ;;
-  file-move) run_cmd "mv $1 $2" ;;
-  file-copy) run_cmd "cp -r $1 $2" ;;
-  file-mkdir) run_cmd "mkdir -p $1" ;;
-  download-file) run_cmd "curl -L -o $1 $2" ;;
-  upload-file) run_cmd "curl -F 'file=@$1' $2" ;;
-  ui-dump) 
-    run_cmd "uiautomator dump /sdcard/window_dump.xml >/dev/null 2>&1"
-    node -e "const fs=require('fs');try{const x=fs.readFileSync('/sdcard/window_dump.xml','utf8');const r=/(?:text|content-desc)=\"([^\"]+)\"[^>]*bounds=\"(\[[0-9]+,[0-9]+\]\[[0-9]+,[0-9]+\])\"/g;let m;while((m=r.exec(x))!==null){if(m[1].trim()!=='')console.log(m[2]+' '+m[1]);}}catch(e){}" 2>/dev/null
-    ;;
-  shell) run_cmd "$*" ;;
-  *) echo "Unknown command: $CMD" ;;
+    screenshot)      run_cmd "screencap -p '${1:-/sdcard/screenshot.png}'" ;;
+    open-app)        run_cmd "monkey -p $1 1" ;;
+    youtube-search)  QUERY=$(echo "$*" | sed 's/ /+/g'); run_cmd "am start -a android.intent.action.VIEW -d 'https://www.youtube.com/results?search_query=$QUERY'" ;;
+    open-url)        run_cmd "am start -a android.intent.action.VIEW -d '$1'" ;;
+    wifi)            if [ "$1" = "on" ]; then run_cmd "svc wifi enable"; else run_cmd "svc wifi disable"; fi ;;
+    hotspot)         if [ "$1" = "on" ]; then run_cmd "svc wifi disable; cmd wifi start-softap"; else run_cmd "cmd wifi stop-softap"; fi ;;
+    bluetooth)       if [ "$1" = "on" ]; then run_cmd "svc bluetooth enable"; else run_cmd "svc bluetooth disable"; fi ;;
+    nfc)             if [ "$1" = "on" ]; then run_cmd "svc nfc enable"; else run_cmd "svc nfc disable"; fi ;;
+    airplane)        if [ "$1" = "on" ]; then run_cmd "settings put global airplane_mode_on 1; am broadcast -a android.intent.action.AIRPLANE_MODE"; else run_cmd "settings put global airplane_mode_on 0; am broadcast -a android.intent.action.AIRPLANE_MODE"; fi ;;
+    mobile-data)     if [ "$1" = "on" ]; then run_cmd "svc data enable"; else run_cmd "svc data disable"; fi ;;
+    location)        if [ "$1" = "on" ]; then run_cmd "settings put secure location_mode 3"; else run_cmd "settings put secure location_mode 0"; fi ;;
+    battery)         run_cmd "dumpsys battery" | grep -E "level|temperature|voltage|status" ;;
+    battery-saver)   if [ "$1" = "on" ]; then run_cmd "settings put global low_power 1"; else run_cmd "settings put global low_power 0"; fi ;;
+    brightness)      run_cmd "settings put system screen_brightness $1" ;;
+    volume)          run_cmd "media volume --stream $1 --set $2" ;;
+    tap)             run_cmd "input tap $1 $2" ;;
+    swipe)           run_cmd "input swipe $1 $2 $3 $4 ${5:-500}" ;;
+    text)            run_cmd "input text '$*'" ;;
+    key)             run_cmd "input keyevent $1" ;;
+    home)            run_cmd "input keyevent 3" ;;
+    back)            run_cmd "input keyevent 4" ;;
+    recent)          run_cmd "input keyevent 187" ;;
+    power)           run_cmd "input keyevent 26" ;;
+    menu)            run_cmd "input keyevent 82" ;;
+    volume-up)       run_cmd "input keyevent 24" ;;
+    volume-down)     run_cmd "input keyevent 25" ;;
+    mute)            run_cmd "input keyevent 164" ;;
+    play-pause)      run_cmd "input keyevent 85" ;;
+    next)            run_cmd "input keyevent 87" ;;
+    previous)        run_cmd "input keyevent 88" ;;
+    screen-on)       run_cmd "input keyevent 224" ;;
+    screen-off)      run_cmd "input keyevent 223" ;;
+    camera)          run_cmd "input keyevent 27" ;;
+    notification)    run_cmd "cmd statusbar expand-notifications" ;;
+    quick-settings)  run_cmd "cmd statusbar expand-settings" ;;
+    sleep)           run_cmd "input keyevent 26" ;;
+    wake)            run_cmd "input keyevent 224; input keyevent 82" ;;
+    reboot)          run_cmd "reboot" ;;
+    lock)            run_cmd "am start -a android.app.action.SET_NEW_PASSWORD" ;;
+    device-info)     run_cmd "getprop ro.product.model; getprop ro.build.version.release; getprop ro.product.manufacturer" ;;
+    memory)          run_cmd "dumpsys meminfo" | grep -E "Total RAM|Free RAM" ;;
+    storage)         run_cmd "df -h /data" ;;
+    processes)       run_cmd "ps -A | head -30" ;;
+    kill-app)        run_cmd "am force-stop $1" ;;
+    uninstall-app)   run_cmd "pm uninstall $1" ;;
+    list-apps)       run_cmd "pm list packages -3 | cut -d: -f2" ;;
+    pattern-lock)    run_cmd "input keyevent 26; input keyevent 82; input swipe 200 800 600 800 100; input swipe 600 800 600 1200 100; input swipe 600 1200 200 1200 100; input swipe 200 1200 200 1600 100" ;;
+    pin-unlock)      run_cmd "input text '$1'; input keyevent 66" ;;
+    password-unlock) run_cmd "input text '$1'; input keyevent 66" ;;
+    open-camera)     run_cmd "am start -a android.media.action.IMAGE_CAPTURE" ;;
+    open-video)      run_cmd "am start -a android.media.action.VIDEO_CAPTURE" ;;
+    open-gallery)    run_cmd "am start -a android.intent.action.VIEW -d content://media/external/images/media -t image/*" ;;
+    open-music)      run_cmd "am start -a android.intent.action.VIEW -d content://media/external/audio/media -t audio/*" ;;
+    open-files)      run_cmd "am start -a android.intent.action.VIEW -d content://com.android.externalstorage.documents/root" ;;
+    open-settings)   run_cmd "am start -a android.settings.SETTINGS" ;;
+    open-wifi-settings) run_cmd "am start -a android.settings.WIFI_SETTINGS" ;;
+    open-bluetooth-settings) run_cmd "am start -a android.settings.BLUETOOTH_SETTINGS" ;;
+    open-app-settings) run_cmd "am start -a android.settings.APPLICATION_SETTINGS" ;;
+    open-developer-settings) run_cmd "am start -a android.settings.APPLICATION_DEVELOPMENT_SETTINGS" ;;
+    open-display-settings) run_cmd "am start -a android.settings.DISPLAY_SETTINGS" ;;
+    open-sound-settings) run_cmd "am start -a android.settings.SOUND_SETTINGS" ;;
+    open-storage-settings) run_cmd "am start -a android.settings.INTERNAL_STORAGE_SETTINGS" ;;
+    open-battery-settings) run_cmd "am start -a android.intent.action.POWER_USAGE_SUMMARY" ;;
+    open-security-settings) run_cmd "am start -a android.settings.SECURITY_SETTINGS" ;;
+    open-accounts-settings) run_cmd "am start -a android.settings.SYNC_SETTINGS" ;;
+    open-language-settings) run_cmd "am start -a android.settings.LOCALE_SETTINGS" ;;
+    open-date-settings) run_cmd "am start -a android.settings.DATE_SETTINGS" ;;
+    open-accessibility-settings) run_cmd "am start -a android.settings.ACCESSIBILITY_SETTINGS" ;;
+    open-print-settings) run_cmd "am start -a android.settings.PRINT_SETTINGS" ;;
+    open-vpn-settings) run_cmd "am start -a android.net.vpn.SETTINGS" ;;
+    open-nfc-settings) run_cmd "am start -a android.settings.NFC_SETTINGS" ;;
+    take-photo)      run_cmd "am start -a android.media.action.IMAGE_CAPTURE; sleep 2; input keyevent 27; input keyevent 27" ;;
+    record-video)    run_cmd "am start -a android.media.action.VIDEO_CAPTURE; sleep 2; input keyevent 27; sleep 5; input keyevent 27" ;;
+    play-media)      run_cmd "am start -a android.intent.action.VIEW -d '$1' -t video/*" ;;
+    open-contacts)   run_cmd "am start -a android.intent.action.VIEW content://contacts/people" ;;
+    open-calendar)   run_cmd "am start -a android.intent.action.VIEW content://com.android.calendar" ;;
+    open-calculator) run_cmd "am start -a android.intent.action.MAIN -n com.android.calculator2/.Calculator" ;;
+    open-clock)      run_cmd "am start -a android.intent.action.MAIN -n com.android.deskclock/.DeskClock" ;;
+    open-messages)   run_cmd "am start -a android.intent.action.MAIN -n com.google.android.apps.messaging/.ui.ConversationListActivity" ;;
+    open-phone)      run_cmd "am start -a android.intent.action.MAIN -n com.android.dialer/.DialtactsActivity" ;;
+    open-chrome)     run_cmd "am start -a android.intent.action.MAIN -n com.android.chrome/.Main" ;;
+    open-playstore)  run_cmd "am start -a android.intent.action.VIEW -d market://details?id=$1" ;;
+    install-apk)     run_cmd "pm install -r $1" ;;
+    uninstall-package) run_cmd "pm uninstall $1" ;;
+    clear-cache)     run_cmd "pm clear $1" ;;
+    force-stop)      run_cmd "am force-stop $1" ;;
+    start-service)   run_cmd "am startservice $1" ;;
+    stop-service)    run_cmd "am stopservice $1" ;;
+    broadcast)       run_cmd "am broadcast -a $1" ;;
+    get-clipboard)   run_cmd "cmd clipboard get-text" 2>/dev/null ;;
+    set-clipboard)   run_cmd "cmd clipboard set-text '$*'" 2>/dev/null ;;
+    file-list)       run_cmd "ls -la $1" ;;
+    file-read)       run_cmd "cat $1" ;;
+    file-delete)     run_cmd "rm -rf $1" ;;
+    file-move)       run_cmd "mv $1 $2" ;;
+    file-copy)       run_cmd "cp -r $1 $2" ;;
+    file-mkdir)      run_cmd "mkdir -p $1" ;;
+    download-file)   run_cmd "curl -L -o $1 $2" ;;
+    upload-file)     run_cmd "curl -F 'file=@$1' $2" ;;
+    ui-dump)
+        run_cmd "uiautomator dump /sdcard/window_dump.xml >/dev/null 2>&1"
+        node -e "
+            const fs = require('fs');
+            try {
+                const xml = fs.readFileSync('/sdcard/window_dump.xml', 'utf8');
+                const regex = /(?:text|content-desc)=\"([^\"]+)\"[^>]*bounds=\"(\[[0-9]+,[0-9]+\]\[[0-9]+,[0-9]+\])\"/g;
+                let match;
+                while ((match = regex.exec(xml)) !== null) {
+                    if (match[1].trim() !== '') console.log(match[2] + ' ' + match[1]);
+                }
+            } catch(e) { console.log('{}'); }
+        " 2>/dev/null
+        ;;
+    shell)           run_cmd "$*" ;;
+    *)               echo "Unknown command: $CMD" ;;
 esac
 EOF
-chmod +x ~/phone_control.sh
+chmod +x scripts/phone_control.sh
 
-mkdir -p ~/phone_server
-cd ~/phone_server
+cd server
 npm init -y >/dev/null 2>&1
 npm install express socket.io fluent-ffmpeg duck-duck-scrape >/dev/null 2>&1
 
-cat > ~/phone_server/server.js << 'EOFJS'
+cat > server.js << 'EOFJS'
 const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
@@ -209,12 +231,16 @@ const server = http.createServer(app);
 const io = socketIo(server, { cors: { origin: "*", methods: ["GET", "POST"] } });
 const PORT = 3000;
 
+const SYSTEM_DIR = path.join(os.homedir(), 'phone_control_system');
+const SCRIPTS_DIR = path.join(SYSTEM_DIR, 'scripts');
+const LOGS_DIR = path.join(SYSTEM_DIR, 'logs');
+
+const LOG_FILE = path.join(LOGS_DIR, 'phone_control.log');
+const HISTORY_FILE = path.join(LOGS_DIR, 'command_history.json');
+const CONNECTIONS_FILE = path.join(LOGS_DIR, 'connected_devices.json');
+
 app.use(express.json());
 app.use(express.static(__dirname));
-
-const LOG_FILE = path.join(os.homedir(), 'phone_control.log');
-const HISTORY_FILE = path.join(os.homedir(), 'command_history.json');
-const CONNECTIONS_FILE = path.join(os.homedir(), 'connected_devices.json');
 
 let connectedDevices = new Map();
 let deviceCounter = 0;
@@ -235,7 +261,7 @@ function log(message, type='info', deviceInfo=null) {
 
 function executeCommand(cmd, deviceInfo) {
   return new Promise((resolve) => {
-    const command = `bash ~/phone_control.sh ${cmd}`;
+    const command = `bash ${SCRIPTS_DIR}/phone_control.sh ${cmd}`;
     log(`[${deviceInfo ? deviceInfo.ip : 'local'}] ${cmd}`, 'command', deviceInfo);
     exec(command, { shell: '/data/data/com.termux/files/usr/bin/bash', timeout: 60000 }, (error, stdout, stderr) => {
       const result = error ? `Error: ${error.message}` : (stdout || stderr || 'Done');
@@ -255,9 +281,7 @@ async function aiProcessCommand(userInput, mode) {
     if (mode === 'chat') {
       systemPrompt = 'You are a helpful AI assistant. Answer questions naturally and conversationally.';
     } else {
-      systemPrompt = `You are a phone control AI. Convert user requests into phone_control.sh commands.
-Available commands: screenshot, open-app, open-url, youtube-search, wifi, hotspot, bluetooth, nfc, airplane, mobile-data, location, battery, battery-saver, brightness, volume, tap, swipe, text, key, home, back, recent, power, menu, volume-up, volume-down, mute, play-pause, next, previous, screen-on, screen-off, camera, notification, quick-settings, sleep, wake, reboot, lock, device-info, memory, storage, processes, kill-app, uninstall-app, list-apps, pattern-lock, pin-unlock, password-unlock, open-camera, open-video, open-gallery, open-music, open-files, open-settings, open-wifi-settings, open-bluetooth-settings, open-app-settings, open-developer-settings, open-display-settings, open-sound-settings, open-storage-settings, open-battery-settings, open-security-settings, open-accounts-settings, open-language-settings, open-date-settings, open-accessibility-settings, open-print-settings, open-vpn-settings, open-nfc-settings, take-photo, record-video, play-media, open-contacts, open-calendar, open-calculator, open-clock, open-messages, open-phone, open-chrome, open-playstore, install-apk, uninstall-package, clear-cache, force-stop, start-service, stop-service, broadcast, get-clipboard, set-clipboard, file-list, file-read, file-delete, file-move, file-copy, file-mkdir, download-file, upload-file, ui-dump, shell.
-Respond with ONLY the exact command.`;
+      systemPrompt = `You are a phone control AI. Convert user requests into phone_control.sh commands. Available commands: screenshot, open-app, open-url, youtube-search, wifi, hotspot, bluetooth, nfc, airplane, mobile-data, location, battery, battery-saver, brightness, volume, tap, swipe, text, key, home, back, recent, power, menu, volume-up, volume-down, mute, play-pause, next, previous, screen-on, screen-off, camera, notification, quick-settings, sleep, wake, reboot, lock, device-info, memory, storage, processes, kill-app, uninstall-app, list-apps, pattern-lock, pin-unlock, password-unlock, open-camera, open-video, open-gallery, open-music, open-files, open-settings, open-wifi-settings, open-bluetooth-settings, open-app-settings, open-developer-settings, open-display-settings, open-sound-settings, open-storage-settings, open-battery-settings, open-security-settings, open-accounts-settings, open-language-settings, open-date-settings, open-accessibility-settings, open-print-settings, open-vpn-settings, open-nfc-settings, take-photo, record-video, play-media, open-contacts, open-calendar, open-calculator, open-clock, open-messages, open-phone, open-chrome, open-playstore, install-apk, uninstall-package, clear-cache, force-stop, start-service, stop-service, broadcast, get-clipboard, set-clipboard, file-list, file-read, file-delete, file-move, file-copy, file-mkdir, download-file, upload-file, ui-dump, shell. Respond with ONLY the exact command.`;
     }
     
     const res = await fetch('https://text.pollinations.ai/', {
@@ -320,9 +344,7 @@ function startCasting() {
       `http://${ip}:8082/screen`
     ]);
     screenCapture.stdout.pipe(castProcess.stdin);
-    castProcess.on('error', (err) => {
-      reject(err);
-    });
+    castProcess.on('error', (err) => reject(err));
     castProcess.on('close', () => {
       isCasting = false;
       io.emit('castStatus', { active: false });
@@ -469,7 +491,7 @@ const castServer = http.createServer((req, res) => {
 castServer.listen(8082);
 EOFJS
 
-cat > ~/phone_server/index.html << 'EOFHTML'
+cat > index.html << 'EOFHTML'
 <!DOCTYPE html>
 <html><head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=yes">
@@ -639,7 +661,6 @@ input::placeholder{color:rgba(255,255,255,0.5)}
 const socket=io();
 let currentPage='main';
 let currentAIMode='chat';
-let chatHistory=[];
 
 function switchPage(page){
 document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
@@ -668,7 +689,7 @@ const res=await fetch('/api/ai',{method:'POST',headers:{'Content-Type':'applicat
 const data=await res.json();
 if(data.success){
 if(data.mode==='chat'){addChatMessage('bot',data.response);}
-else{addChatMessage('bot',`✅ ${data.command}\n${data.result}`);}
+else{addChatMessage('bot','✅ '+data.command+'\n'+data.result);}
 }else{addChatMessage('bot','❌ '+data.message);}
 }catch(e){addChatMessage('bot','❌ Error');}
 }
@@ -686,7 +707,7 @@ async function webSearch(){
 const input=document.getElementById('searchInput');
 const query=input.value.trim();
 if(!query)return;
-addLog({timestamp:new Date().toISOString(),type:'system',message:`Search: ${query}`});
+addLog({timestamp:new Date().toISOString(),type:'system',message:'Search: '+query});
 try{
 const res=await fetch('/api/search',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query})});
 const data=await res.json();
@@ -705,7 +726,7 @@ data.files.split('\n').forEach(f=>{
 if(!f)return;
 const div=document.createElement('div');
 div.className='file-item';
-div.innerHTML=`<span>📄 ${f}</span>`;
+div.innerHTML='<span>📄 '+f+'</span>';
 div.onclick=()=>{
 const newPath=path+'/'+f;
 document.getElementById('currentPath').value=newPath;
@@ -764,12 +785,7 @@ async function loadDeviceInfo(){
 try{
 const res=await fetch('/api/device');
 const data=await res.json();
-document.getElementById('deviceInfo').innerHTML=`
-<p>Model: ${data.info.split('\n')[2]||'Unknown'}</p>
-<p>Android: ${data.info.split('\n')[1]||'Unknown'}</p>
-<p>Battery: ${data.battery}</p>
-<p>Memory: ${data.memory}</p>
-`;
+document.getElementById('deviceInfo').innerHTML='<p>Model: '+(data.info.split('\n')[2]||'Unknown')+'</p><p>Android: '+(data.info.split('\n')[1]||'Unknown')+'</p><p>Battery: '+data.battery+'</p><p>Memory: '+data.memory+'</p>';
 }catch(e){}
 }
 
@@ -784,7 +800,7 @@ function addLog(l){
 const container=document.getElementById('logContainer');
 const d=document.createElement('div');
 d.className='log-entry';
-d.innerHTML=`<span class="log-time">[${new Date(l.timestamp).toLocaleTimeString()}]</span> <span class="log-${l.type}">${l.device?`[${l.device.ip}] `:''}${l.message}</span>`;
+d.innerHTML='<span class="log-time">['+new Date(l.timestamp).toLocaleTimeString()+']</span> <span class="log-'+l.type+'">'+(l.device?'['+l.device.ip+'] ':'')+l.message+'</span>';
 container.appendChild(d);
 container.scrollTop=container.scrollHeight;
 }
@@ -804,11 +820,11 @@ loadMainInfo();
 
 socket.on('log',addLog);
 socket.on('logs',logs=>{document.getElementById('logContainer').innerHTML='';logs.reverse().forEach(addLog);});
-socket.on('commandResult',d=>{addLog({timestamp:new Date().toISOString(),type:'success',message:`${d.command}: ${d.result}`});});
+socket.on('commandResult',d=>{addLog({timestamp:new Date().toISOString(),type:'success',message:d.command+': '+d.result});});
 socket.on('gatewayInfo',info=>{document.getElementById('gatewayUrl').textContent=info.url;});
 socket.on('devicesUpdate',devices=>{
-document.getElementById('deviceCount').textContent=`(${devices.length})`;
-document.getElementById('devicesList').innerHTML=devices.length?devices.map(d=>`<div class="device-item"><span class="device-online"></span><span style="flex:1">${d.ip}</span><span style="font-size:11px;opacity:0.5">${new Date(d.connectedAt).toLocaleTimeString()}</span></div>`).join(''):'<div class="device-item" style="justify-content:center;opacity:0.7">No devices connected</div>';
+document.getElementById('deviceCount').textContent='('+devices.length+')';
+document.getElementById('devicesList').innerHTML=devices.length?devices.map(d=>'<div class="device-item"><span class="device-online"></span><span style="flex:1">'+d.ip+'</span><span style="font-size:11px;opacity:0.5">'+new Date(d.connectedAt).toLocaleTimeString()+'</span></div>').join(''):'<div class="device-item" style="justify-content:center;opacity:0.7">No devices connected</div>';
 });
 socket.on('castStatus',status=>{
 castActive=status.active;
@@ -832,9 +848,9 @@ try{
 const r=await fetch('/api/device');
 const d=await r.json();
 const i=d.info.split('\n');
-document.getElementById('deviceModel').textContent=`${i[2]||'Android'} ${i[1]||''}`;
+document.getElementById('deviceModel').textContent=(i[2]||'Android')+' '+(i[1]||'');
 const b=d.battery.match(/level: (\d+)/);
-if(b)document.getElementById('batteryLevel').textContent=`🔋 ${b[1]}%`;
+if(b)document.getElementById('batteryLevel').textContent='🔋 '+b[1]+'%';
 }catch(e){}
 }
 
@@ -846,31 +862,31 @@ loadMainInfo();
 EOFHTML
 
 mkdir -p ~/.termux/boot
-cat > ~/.termux/boot/start-phone-server << 'EOF'
+cat > ~/.termux/boot/start-phone-server << EOF
 #!/data/data/com.termux/files/usr/bin/bash
-cd ~/phone_server
+cd $SYSTEM_DIR/server
 npm install --silent express socket.io fluent-ffmpeg duck-duck-scrape 2>/dev/null
 node server.js > /dev/null 2>&1 &
 EOF
 chmod +x ~/.termux/boot/start-phone-server
 
-cat > ~/view_connections.sh << 'EOF'
+cat > "$SYSTEM_DIR/view_connections.sh" << 'EOF'
 #!/data/data/com.termux/files/usr/bin/bash
 echo "🥹 Connected Devices Log"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-if [ -f ~/connected_devices.json ]; then
-    cat ~/connected_devices.json | node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8'));if(d.length===0){console.log('No devices')}else{d.forEach((x,i)=>{console.log(\`\${i+1}. IP: \${x.ip}\`);console.log(\`   Connected: \${new Date(x.connectedAt).toLocaleString()}\`);if(x.disconnectedAt)console.log(\`   Disconnected: \${new Date(x.disconnectedAt).toLocaleString()}\`);console.log('')})}"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+if [ -f ~/phone_control_system/logs/connected_devices.json ]; then
+    cat ~/phone_control_system/logs/connected_devices.json | node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8'));if(d.length===0){console.log('No devices')}else{d.forEach((x,i)=>{console.log((i+1)+'. IP: '+x.ip);console.log('   Connected: '+new Date(x.connectedAt).toLocaleString());if(x.disconnectedAt)console.log('   Disconnected: '+new Date(x.disconnectedAt).toLocaleString());console.log('')})}"
 else
     echo "No connections yet"
 fi
 echo ""
 echo "📋 Live Log:"
-tail -f ~/phone_control.log | grep --line-buffered "Device"
+tail -f ~/phone_control_system/logs/phone_control.log | grep --line-buffered "Device"
 EOF
-chmod +x ~/view_connections.sh
+chmod +x "$SYSTEM_DIR/view_connections.sh"
 
-cd ~/phone_server
-npm install --silent express socket.io fluent-ffmpeg duck-duck-scrape 2>/dev/null
+bash "$SYSTEM_DIR/scripts/phone_control.sh" hotspot on 2>/dev/null || true
+sleep 3
 
 GATEWAY_IP=$(ip route get 1 2>/dev/null | grep -oP 'src \K\S+' | head -1)
 if [ -z "$GATEWAY_IP" ]; then
@@ -880,20 +896,18 @@ if [ -z "$GATEWAY_IP" ]; then
     GATEWAY_IP="192.168.43.1"
 fi
 
-~/phone_control.sh hotspot on 2>/dev/null || true
-sleep 3
-
 echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "🥹 AUTO-INSTALLATION COMPLETE!"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 echo "🥹 Gateway URL: http://$GATEWAY_IP:3000"
 echo ""
 echo "📋 Copy this URL to other devices on this hotspot!"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 echo "🚀 Starting server..."
 echo ""
 
+cd "$SYSTEM_DIR/server"
 node server.js
