@@ -107,9 +107,7 @@ case "$CMD" in
         sleep 0.5
         run_cmd "input keyevent 23"
         ;;
-    youtube-play)
-        run_cmd "am start -a android.intent.action.VIEW -d 'vnd.youtube://watch?v=$1'"
-        ;;
+    youtube-play) run_cmd "am start -a android.intent.action.VIEW -d 'vnd.youtube://watch?v=$1'" ;;
     open-url) run_cmd "am start -a android.intent.action.VIEW -d '$1'" ;;
     wifi) if [ "$1" = "on" ]; then run_cmd "svc wifi enable"; else run_cmd "svc wifi disable"; fi ;;
     hotspot) if [ "$1" = "on" ]; then run_cmd "svc wifi disable; cmd wifi start-softap"; else run_cmd "cmd wifi stop-softap"; fi ;;
@@ -294,13 +292,17 @@ try {
 } catch(e) {}
 
 function saveConnectedDevices() {
-    fs.writeFileSync(CONNECTIONS_FILE, JSON.stringify(Array.from(connectedDevices.values()), null, 2));
+    try {
+        fs.writeFileSync(CONNECTIONS_FILE, JSON.stringify(Array.from(connectedDevices.values()), null, 2));
+    } catch(e) {}
 }
 
-function log(message, type = 'info', deviceInfo = null) {
+function log(message, type, deviceInfo) {
+    type = type || 'info';
+    deviceInfo = deviceInfo || null;
     const entry = { 
         timestamp: new Date().toISOString(), 
-        type, 
+        type: type, 
         message: String(message).substring(0, 500), 
         device: deviceInfo ? { ip: deviceInfo.ip } : null 
     };
@@ -320,13 +322,15 @@ function executeCommand(cmd, deviceInfo) {
             timeout: 30000,
             maxBuffer: 1024 * 1024 * 5
         }, (error, stdout, stderr) => {
-            const result = error ? `Error: ${error.message}` : (stdout || stderr || 'Done');
+            const result = error ? 'Error: ' + error.message : (stdout || stderr || 'Done');
             const shortResult = result.substring(0, 300);
-            log(`Result: ${shortResult}`, error ? 'error' : 'success', deviceInfo);
+            log('Result: ' + shortResult, error ? 'error' : 'success', deviceInfo);
             
             let history = [];
             try { 
-                history = JSON.parse(fs.readFileSync(HISTORY_FILE,'utf8')); 
+                if (fs.existsSync(HISTORY_FILE)) {
+                    history = JSON.parse(fs.readFileSync(HISTORY_FILE,'utf8')); 
+                }
             } catch(e) {}
             history.unshift({ 
                 timestamp: new Date().toISOString(), 
@@ -350,12 +354,7 @@ async function aiProcessCommand(userInput, mode) {
         } else if (mode === 'search') {
             systemPrompt = 'You are a search assistant. Extract the main search query from user input. Return ONLY the query terms.';
         } else {
-            systemPrompt = `You are a phone control AI. Convert user requests into phone_control.sh commands.
-Available commands: screenshot, open-app, open-url, youtube-search, youtube-play, wifi, hotspot, bluetooth, nfc, airplane, mobile-data, location, battery, battery-saver, brightness, volume, tap, swipe, text, key, home, back, recent, power, menu, volume-up, volume-down, mute, play-pause, next, previous, screen-on, screen-off, camera, notification, quick-settings, sleep, wake, reboot, lock, device-info, memory, storage, processes, kill-app, uninstall-app, list-apps, pattern-lock, pin-unlock, open-camera, open-video, open-gallery, open-music, open-files, open-settings, open-wifi-settings, open-bluetooth-settings, open-app-settings, open-developer-settings, open-display-settings, open-sound-settings, open-storage-settings, open-battery-settings, open-security-settings, open-tiktok, open-facebook, open-instagram, open-twitter, open-whatsapp, open-telegram, open-spotify, open-netflix, search-tiktok.
-For app launches: open-tiktok, open-facebook, etc.
-For searches: youtube-search [query], search-tiktok [query].
-For direct YouTube play: youtube-play [videoID].
-Respond with ONLY the exact command.`;
+            systemPrompt = 'You are a phone control AI. Convert user requests into phone_control.sh commands. Available: screenshot, open-app, open-url, youtube-search, youtube-play, wifi, hotspot, bluetooth, nfc, airplane, mobile-data, location, battery, battery-saver, brightness, volume, tap, swipe, text, key, home, back, recent, power, menu, volume-up, volume-down, mute, play-pause, next, previous, screen-on, screen-off, camera, notification, quick-settings, sleep, wake, reboot, lock, device-info, memory, storage, processes, kill-app, uninstall-app, list-apps, pattern-lock, pin-unlock, open-camera, open-video, open-gallery, open-music, open-files, open-settings, open-wifi-settings, open-bluetooth-settings, open-app-settings, open-developer-settings, open-display-settings, open-sound-settings, open-storage-settings, open-battery-settings, open-security-settings, open-tiktok, open-facebook, open-instagram, open-twitter, open-whatsapp, open-telegram, open-spotify, open-netflix, search-tiktok. For app launches: open-tiktok, open-facebook, etc. For searches: youtube-search [query], search-tiktok [query]. For direct YouTube play: youtube-play [videoID]. Respond with ONLY the exact command.';
         }
         
         const response = await axios.post('https://text.pollinations.ai/', {
@@ -376,7 +375,7 @@ Respond with ONLY the exact command.`;
 
 async function webSearch(query) {
     try {
-        const response = await axios.get(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`, {
+        const response = await axios.get('https://html.duckduckgo.com/html/?q=' + encodeURIComponent(query), {
             headers: { 'User-Agent': 'Mozilla/5.0' },
             timeout: 10000
         });
@@ -389,7 +388,7 @@ async function webSearch(query) {
                 const title = $(el).find('.result__title').text().trim();
                 const snippet = $(el).find('.result__snippet').text().trim();
                 const link = $(el).find('.result__url').text().trim();
-                if (title) results.push({ title, snippet, link });
+                if (title) results.push({ title: title, snippet: snippet, link: link });
             }
         });
         
@@ -401,12 +400,12 @@ async function webSearch(query) {
 
 async function searchYouTube(query) {
     try {
-        const response = await axios.get(`https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`, {
+        const response = await axios.get('https://www.youtube.com/results?search_query=' + encodeURIComponent(query), {
             headers: { 'User-Agent': 'Mozilla/5.0' }
         });
         
-        const videoId = response.data.match(/"videoId":"([^"]+)"/)?.[1];
-        return videoId || null;
+        const match = response.data.match(/"videoId":"([^"]+)"/);
+        return match ? match[1] : null;
     } catch(e) {
         return null;
     }
@@ -417,13 +416,14 @@ function getLocalIP() {
     for (const name of Object.keys(interfaces)) {
         for (const iface of interfaces[name]) {
             if (iface.family === 'IPv4' && !iface.internal) {
-                if (name.includes('wlan') || name.includes('ap') || name.includes('rmnet') || name.includes 'eth')) {
+                if (name.includes('wlan') || name.includes('ap') || name.includes('rmnet') || name.includes('eth')) {
                     return iface.address;
                 }
             }
         }
     }
-    return Object.values(interfaces).flat().find(i => i.family === 'IPv4' && !i.internal)?.address || '0.0.0.0';
+    const all = Object.values(interfaces).flat().find(i => i.family === 'IPv4' && !i.internal);
+    return all ? all.address : '0.0.0.0';
 }
 
 function startScreenStream() {
@@ -448,7 +448,7 @@ function startScreenStream() {
             '-b:v', '800k',
             '-maxrate', '800k',
             '-bufsize', '1600k',
-            `http://${ip}:${streamPort}/stream`
+            'http://' + ip + ':' + streamPort + '/stream'
         ]);
         
         streamProcess.on('error', (err) => {
@@ -463,8 +463,8 @@ function startScreenStream() {
         
         setTimeout(() => {
             isStreaming = true;
-            io.emit('streamStatus', { active: true, url: `http://${ip}:${streamPort}/stream` });
-            resolve({ active: true, url: `http://${ip}:${streamPort}/stream` });
+            io.emit('streamStatus', { active: true, url: 'http://' + ip + ':' + streamPort + '/stream' });
+            resolve({ active: true, url: 'http://' + ip + ':' + streamPort + '/stream' });
         }, 1000);
     });
 }
@@ -483,8 +483,12 @@ app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 
 app.get('/api/logs', (req, res) => {
     try { 
-        const logs = fs.readFileSync(LOG_FILE,'utf8').split('\n').filter(l => l).map(JSON.parse).slice(-200);
-        res.json(logs); 
+        if (fs.existsSync(LOG_FILE)) {
+            const logs = fs.readFileSync(LOG_FILE,'utf8').split('\n').filter(l => l).map(JSON.parse).slice(-200);
+            res.json(logs); 
+        } else {
+            res.json([]);
+        }
     } catch(e) { 
         res.json([]); 
     }
@@ -495,12 +499,12 @@ app.get('/api/device', async (req, res) => {
     const battery = await executeCommand('battery');
     const memory = await executeCommand('memory');
     const storage = await executeCommand('storage');
-    res.json({ info, battery, memory, storage });
+    res.json({ info: info, battery: battery, memory: memory, storage: storage });
 });
 
 app.get('/api/gateway', (req, res) => {
     const ip = getLocalIP();
-    res.json({ ip, url: `http://${ip}:${PORT}`, port: PORT });
+    res.json({ ip: ip, url: 'http://' + ip + ':' + PORT, port: PORT });
 });
 
 app.get('/api/connections', (req, res) => {
@@ -513,7 +517,7 @@ app.post('/api/command', async (req, res) => {
         userAgent: req.get('User-Agent') 
     };
     const result = await executeCommand(req.body.command, deviceInfo);
-    res.json({ success: true, result });
+    res.json({ success: true, result: result });
 });
 
 app.post('/api/ai', async (req, res) => {
@@ -521,17 +525,18 @@ app.post('/api/ai', async (req, res) => {
         ip: req.ip.replace('::ffff:', '').replace('::1', '127.0.0.1'), 
         userAgent: req.get('User-Agent') 
     };
-    const { prompt, mode } = req.body;
+    const prompt = req.body.prompt;
+    const mode = req.body.mode;
     
     if (mode === 'search') {
         const searchQuery = await aiProcessCommand(prompt, 'search');
         const results = await webSearch(searchQuery);
-        res.json({ success: true, mode: 'search', query: searchQuery, results });
+        res.json({ success: true, mode: 'search', query: searchQuery, results: results });
     } else {
         const response = await aiProcessCommand(prompt, mode || 'action');
         
         if (mode === 'chat') {
-            res.json({ success: true, mode: 'chat', response });
+            res.json({ success: true, mode: 'chat', response: response });
         } else {
             const cmd = response.trim();
             if (cmd && !cmd.toLowerCase().includes('sorry') && !cmd.toLowerCase().includes('cannot')) {
@@ -539,15 +544,15 @@ app.post('/api/ai', async (req, res) => {
                     const query = cmd.replace('youtube-search', '').trim();
                     const videoId = await searchYouTube(query);
                     if (videoId) {
-                        await executeCommand(`youtube-play ${videoId}`, deviceInfo);
+                        await executeCommand('youtube-play ' + videoId, deviceInfo);
                         res.json({ success: true, mode: 'action', command: cmd, result: 'Playing first YouTube result' });
                     } else {
                         const result = await executeCommand(cmd, deviceInfo);
-                        res.json({ success: true, mode: 'action', command: cmd, result });
+                        res.json({ success: true, mode: 'action', command: cmd, result: result });
                     }
                 } else {
                     const result = await executeCommand(cmd, deviceInfo);
-                    res.json({ success: true, mode: 'action', command: cmd, result });
+                    res.json({ success: true, mode: 'action', command: cmd, result: result });
                 }
             } else {
                 res.json({ success: false, message: 'Cannot parse command' });
@@ -559,7 +564,7 @@ app.post('/api/ai', async (req, res) => {
 app.post('/api/search', async (req, res) => {
     try {
         const results = await webSearch(req.body.query);
-        res.json({ success: true, results });
+        res.json({ success: true, results: results });
     } catch(e) {
         res.json({ success: false, message: 'Search failed' });
     }
@@ -568,35 +573,36 @@ app.post('/api/search', async (req, res) => {
 app.post('/api/stream/start', async (req, res) => {
     try {
         const result = await startScreenStream();
-        res.json({ success: true, ...result });
+        res.json({ success: true, active: result.active, url: result.url });
     } catch(e) {
         res.json({ success: false, message: e.message });
     }
 });
 
 app.post('/api/stream/stop', (req, res) => {
-    res.json({ success: true, ...stopScreenStream() });
+    const result = stopScreenStream();
+    res.json({ success: true, active: result.active });
 });
 
 app.get('/api/stream/status', (req, res) => {
-    res.json({ active: isStreaming, url: isStreaming ? `http://${getLocalIP()}:${streamPort}/stream` : null });
+    res.json({ active: isStreaming, url: isStreaming ? 'http://' + getLocalIP() + ':' + streamPort + '/stream' : null });
 });
 
 app.get('/api/files', async (req, res) => {
     const dir = req.query.path || '/';
-    const result = await executeCommand(`file-list "${dir}"`);
+    const result = await executeCommand('file-list "' + dir + '"');
     res.json({ path: dir, files: result });
 });
 
 app.get('/api/file/content', async (req, res) => {
     const filepath = req.query.path;
-    const content = await executeCommand(`file-read "${filepath}"`);
-    res.json({ path: filepath, content });
+    const content = await executeCommand('file-read "' + filepath + '"');
+    res.json({ path: filepath, content: content });
 });
 
 io.on('connection', (socket) => {
     const deviceInfo = {
-        id: `device_${++deviceCounter}_${Date.now()}`,
+        id: 'device_' + (++deviceCounter) + '_' + Date.now(),
         ip: socket.handshake.address.replace('::ffff:', '').replace('::1', '127.0.0.1'),
         userAgent: socket.handshake.headers['user-agent'],
         connectedAt: new Date().toISOString(),
@@ -605,19 +611,19 @@ io.on('connection', (socket) => {
     
     connectedDevices.set(deviceInfo.id, deviceInfo);
     saveConnectedDevices();
-    log(`🥹 Device connected from ${deviceInfo.ip}`, 'system', deviceInfo);
-    console.log(`🥹 [${new Date().toLocaleTimeString()}] Device connected: ${deviceInfo.ip}`);
+    log('Device connected from ' + deviceInfo.ip, 'system', deviceInfo);
+    console.log('[' + new Date().toLocaleTimeString() + '] Device connected: ' + deviceInfo.ip);
     
     io.emit('devicesUpdate', Array.from(connectedDevices.values()));
-    socket.emit('streamStatus', { active: isStreaming, url: isStreaming ? `http://${getLocalIP()}:${streamPort}/stream` : null });
-    socket.emit('gatewayInfo', { url: `http://${getLocalIP()}:${PORT}` });
+    socket.emit('streamStatus', { active: isStreaming, url: isStreaming ? 'http://' + getLocalIP() + ':' + streamPort + '/stream' : null });
+    socket.emit('gatewayInfo', { url: 'http://' + getLocalIP() + ':' + PORT });
     
     socket.on('disconnect', () => {
         const device = connectedDevices.get(deviceInfo.id);
         if (device) {
             device.disconnectedAt = new Date().toISOString();
-            log(`🥹 Device disconnected from ${device.ip}`, 'system', device);
-            console.log(`🥹 [${new Date().toLocaleTimeString()}] Device disconnected: ${device.ip}`);
+            log('Device disconnected from ' + device.ip, 'system', device);
+            console.log('[' + new Date().toLocaleTimeString() + '] Device disconnected: ' + device.ip);
             connectedDevices.delete(deviceInfo.id);
             saveConnectedDevices();
             io.emit('devicesUpdate', Array.from(connectedDevices.values()));
@@ -626,24 +632,30 @@ io.on('connection', (socket) => {
     
     socket.on('getLogs', () => {
         try { 
-            const logs = fs.readFileSync(LOG_FILE,'utf8').split('\n').filter(l => l).map(JSON.parse).slice(-100);
-            socket.emit('logs', logs); 
-        } catch(e) {}
+            if (fs.existsSync(LOG_FILE)) {
+                const logs = fs.readFileSync(LOG_FILE,'utf8').split('\n').filter(l => l).map(JSON.parse).slice(-100);
+                socket.emit('logs', logs); 
+            } else {
+                socket.emit('logs', []);
+            }
+        } catch(e) {
+            socket.emit('logs', []);
+        }
     });
     
     socket.on('command', async (cmd) => {
         const result = await executeCommand(cmd, deviceInfo);
-        socket.emit('commandResult', { command: cmd, result });
+        socket.emit('commandResult', { command: cmd, result: result });
     });
     
     socket.on('getGateway', () => {
-        socket.emit('gatewayInfo', { url: `http://${getLocalIP()}:${PORT}` });
+        socket.emit('gatewayInfo', { url: 'http://' + getLocalIP() + ':' + PORT });
     });
     
     socket.on('startStream', async () => {
         try {
             await startScreenStream();
-            socket.emit('streamStarted', { url: `http://${getLocalIP()}:${streamPort}/stream` });
+            socket.emit('streamStarted', { url: 'http://' + getLocalIP() + ':' + streamPort + '/stream' });
         } catch(e) {
             socket.emit('streamError', e.message);
         }
@@ -655,7 +667,7 @@ io.on('connection', (socket) => {
     });
     
     socket.on('typeText', (text) => {
-        executeCommand(`text "${text}"`, deviceInfo);
+        executeCommand('text "' + text + '"', deviceInfo);
     });
 });
 
@@ -684,8 +696,8 @@ streamServer.listen(streamPort);
 
 server.listen(PORT, '0.0.0.0', () => {
     const ip = getLocalIP();
-    log(`🥹 Server started - Gateway: http://${ip}:${PORT}`, 'system');
-    console.log(`\n🥹 Gateway URL: http://${ip}:${PORT}\n`);
+    log('Server started - Gateway: http://' + ip + ':' + PORT, 'system');
+    console.log('\nGateway URL: http://' + ip + ':' + PORT + '\n');
 });
 EOFJS
 
@@ -694,7 +706,7 @@ cat > index.html << 'EOFHTML'
 <html><head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=yes,viewport-fit=cover">
-<title>🥹 Phone Control</title>
+<title>Phone Control</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0a0e27;min-height:100vh;color:#fff}
@@ -752,42 +764,42 @@ input::placeholder{color:rgba(255,255,255,0.5)}
 </head><body>
 <div class="container">
 <div class="gateway-banner">
-<h2 style="margin-bottom:8px;font-size:18px">🥹 Gateway Access URL</h2>
+<h2 style="margin-bottom:8px;font-size:18px">Gateway Access URL</h2>
 <div style="display:flex;align-items:center;flex-wrap:wrap;gap:10px">
 <span class="gateway-url" id="gatewayUrl">Loading...</span>
-<button class="copy-btn" onclick="copyGatewayUrl()">📋 Copy</button>
+<button class="copy-btn" onclick="copyGatewayUrl()">Copy</button>
 </div>
 <p style="margin-top:12px;opacity:0.9;font-size:14px">Connect to this hotspot and open this URL</p>
 </div>
 
 <div class="nav-bar">
-<button class="nav-btn active" onclick="switchPage('main')">🏠 Main</button>
-<button class="nav-btn" onclick="switchPage('ai')">🤖 AI</button>
-<button class="nav-btn" onclick="switchPage('search')">🔍 Search</button>
-<button class="nav-btn" onclick="switchPage('files')">📁 Files</button>
-<button class="nav-btn" onclick="switchPage('stream')">📺 Stream</button>
-<button class="nav-btn" onclick="switchPage('settings')">⚙️ Settings</button>
+<button class="nav-btn active" onclick="switchPage('main')">Main</button>
+<button class="nav-btn" onclick="switchPage('ai')">AI</button>
+<button class="nav-btn" onclick="switchPage('search')">Search</button>
+<button class="nav-btn" onclick="switchPage('files')">Files</button>
+<button class="nav-btn" onclick="switchPage('stream')">Stream</button>
+<button class="nav-btn" onclick="switchPage('settings')">Settings</button>
 </div>
 
 <div id="main-page" class="page active">
 <div class="devices-panel">
-<h3 style="margin-bottom:12px">📱 Connected Devices <span id="deviceCount">(0)</span></h3>
+<h3 style="margin-bottom:12px">Connected Devices <span id="deviceCount">(0)</span></h3>
 <div id="devicesList"><div class="device-item" style="justify-content:center;opacity:0.7">No devices connected</div></div>
 </div>
 <div class="status-bar">
 <div class="status-item"><span class="connection-dot"></span><span id="connectionStatus">Connected</span></div>
 <div class="status-item"><span id="deviceModel">Loading...</span></div>
-<div class="status-item"><span id="batteryLevel">🔋 --%</span></div>
+<div class="status-item"><span id="batteryLevel">--%</span></div>
 </div>
 <div class="grid">
-<div class="card"><h2>📱 Navigation</h2><div class="btn-grid">
+<div class="card"><h2>Navigation</h2><div class="btn-grid">
 <button onclick="send('home')"><svg viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>Home</button>
 <button onclick="send('back')"><svg viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>Back</button>
 <button onclick="send('recent')"><svg viewBox="0 0 24 24"><path d="M4 8h4V4H4v4zm6 12h4v-4h-4v4zm-6 0h4v-4H4v4zm0-6h4v-4H4v4zm6 0h4v-4h-4v4zm6-10v4h4V4h-4zm-6 4h4V4h-4v4zm6 6h4v-4h-4v4zm0 6h4v-4h-4v4z"/></svg>Recent</button>
 <button onclick="send('notification')"><svg viewBox="0 0 24 24"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>Notify</button>
 <button onclick="send('quick-settings')"><svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/></svg>Quick</button>
 </div></div>
-<div class="card"><h2>🎮 Media</h2><div class="btn-grid">
+<div class="card"><h2>Media</h2><div class="btn-grid">
 <button onclick="send('volume-up')"><svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3z"/></svg>Vol+</button>
 <button onclick="send('volume-down')"><svg viewBox="0 0 24 24"><path d="M18.5 12c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/></svg>Vol-</button>
 <button onclick="send('mute')"><svg viewBox="0 0 24 24"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63z"/></svg>Mute</button>
@@ -797,7 +809,7 @@ input::placeholder{color:rgba(255,255,255,0.5)}
 </div></div>
 </div>
 <div class="grid">
-<div class="card"><h2>⚡ Power</h2><div class="btn-grid">
+<div class="card"><h2>Power</h2><div class="btn-grid">
 <button onclick="send('power')"><svg viewBox="0 0 24 24"><path d="M13 3h-2v10h2V3zm4.83 2.17l-1.42 1.42C17.99 7.86 19 9.81 19 12c0 3.87-3.13 7-7 7s-7-3.13-7-7c0-2.19 1.01-4.14 2.59-5.42L6.17 5.17C4.23 6.82 3 9.26 3 12c0 4.97 4.03 9 9 9s9-4.03 9-9c0-2.74-1.23-5.18-3.17-6.83z"/></svg>Power</button>
 <button onclick="send('screen-on')"><svg viewBox="0 0 24 24"><path d="M12 7V3H2v18h20V7H12z"/></svg>Screen On</button>
 <button onclick="send('screen-off')"><svg viewBox="0 0 24 24"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2z"/></svg>Screen Off</button>
@@ -805,17 +817,17 @@ input::placeholder{color:rgba(255,255,255,0.5)}
 <button onclick="send('sleep')"><svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/></svg>Sleep</button>
 <button onclick="send('wake')"><svg viewBox="0 0 24 24"><path d="M20 12c0-4.41-3.59-8-8-8s-8 3.59-8 8 3.59 8 8 8 8-3.59 8-8z"/></svg>Wake</button>
 </div></div>
-<div class="card"><h2>📶 Network</h2><div class="btn-grid">
-<button onclick="send('wifi on')">📶 WiFi On</button>
-<button onclick="send('wifi off')">📴 WiFi Off</button>
-<button onclick="send('hotspot on')">🔥 Hotspot On</button>
-<button onclick="send('hotspot off')">❄️ Hotspot Off</button>
-<button onclick="send('bluetooth on')">🔵 BT On</button>
-<button onclick="send('bluetooth off')">⚪ BT Off</button>
+<div class="card"><h2>Network</h2><div class="btn-grid">
+<button onclick="send('wifi on')">WiFi On</button>
+<button onclick="send('wifi off')">WiFi Off</button>
+<button onclick="send('hotspot on')">Hotspot On</button>
+<button onclick="send('hotspot off')">Hotspot Off</button>
+<button onclick="send('bluetooth on')">BT On</button>
+<button onclick="send('bluetooth off')">BT Off</button>
 </div></div>
 </div>
 <div class="grid">
-<div class="card"><h2>📱 Apps</h2><div class="btn-grid">
+<div class="card"><h2>Apps</h2><div class="btn-grid">
 <button onclick="send('open-tiktok')">TikTok</button>
 <button onclick="send('open-facebook')">Facebook</button>
 <button onclick="send('open-instagram')">Instagram</button>
@@ -827,7 +839,7 @@ input::placeholder{color:rgba(255,255,255,0.5)}
 <button onclick="send('open-chrome')">Chrome</button>
 <button onclick="send('open-camera')">Camera</button>
 </div></div>
-<div class="card"><h2>🎯 Input</h2><div class="input-group">
+<div class="card"><h2>Input</h2><div class="input-group">
 <input type="number" id="tapX" placeholder="X" value="500" style="width:80px">
 <input type="number" id="tapY" placeholder="Y" value="500" style="width:80px">
 <button onclick="send('tap '+tapX.value+' '+tapY.value)">Tap</button>
@@ -837,7 +849,7 @@ input::placeholder{color:rgba(255,255,255,0.5)}
 <button onclick="typeWithAnimation(textInput.value)">Type</button>
 </div></div>
 </div>
-<div class="card"><h2>📝 Command Log</h2>
+<div class="card"><h2>Command Log</h2>
 <div class="input-group">
 <input type="text" id="customCommand" placeholder="Enter command...">
 <button onclick="send(customCommand.value);customCommand.value=''">Execute</button>
@@ -848,11 +860,11 @@ input::placeholder{color:rgba(255,255,255,0.5)}
 
 <div id="ai-page" class="page">
 <div class="grid">
-<div class="card"><h2>🤖 AI Agent</h2>
+<div class="card"><h2>AI Agent</h2>
 <div class="btn-grid" style="margin-bottom:15px">
-<button class="nav-btn active" onclick="setAIMode('chat')">💬 Chat</button>
-<button class="nav-btn" onclick="setAIMode('action')">⚡ Action</button>
-<button class="nav-btn" onclick="setAIMode('search')">🔍 Search</button>
+<button class="nav-btn active" onclick="setAIMode('chat')">Chat</button>
+<button class="nav-btn" onclick="setAIMode('action')">Action</button>
+<button class="nav-btn" onclick="setAIMode('search')">Search</button>
 </div>
 <div class="chat-container" id="chatContainer"></div>
 <div class="input-group">
@@ -860,14 +872,14 @@ input::placeholder{color:rgba(255,255,255,0.5)}
 <button onclick="sendAIMessage()">Send</button>
 </div>
 <div style="margin-top:12px">
-<button onclick="speechToText()" style="width:100%">🎤 Voice Input</button>
+<button onclick="speechToText()" style="width:100%">Voice Input</button>
 </div>
 </div>
 </div>
 </div>
 
 <div id="search-page" class="page">
-<div class="card"><h2>🔍 Web Search</h2>
+<div class="card"><h2>Web Search</h2>
 <div class="input-group">
 <input type="text" id="searchInput" placeholder="Search the web..." onkeypress="if(event.key==='Enter')webSearch()">
 <button onclick="webSearch()">Search</button>
@@ -877,22 +889,22 @@ input::placeholder{color:rgba(255,255,255,0.5)}
 </div>
 
 <div id="files-page" class="page">
-<div class="card"><h2>📁 File Manager</h2>
+<div class="card"><h2>File Manager</h2>
 <div class="input-group">
 <input type="text" id="currentPath" value="/" placeholder="Path">
 <button onclick="loadFiles(currentPath.value)">Browse</button>
-<button onclick="loadFiles('/sdcard')">📱 SDCard</button>
-<button onclick="loadFiles('/data/data/com.termux/files/home')">📂 Termux</button>
+<button onclick="loadFiles('/sdcard')">SDCard</button>
+<button onclick="loadFiles('/data/data/com.termux/files/home')">Termux</button>
 </div>
 <div class="file-list" id="fileList"></div>
 </div>
 </div>
 
 <div id="stream-page" class="page">
-<div class="card"><h2>📺 Screen Stream</h2>
+<div class="card"><h2>Screen Stream</h2>
 <div class="btn-grid" style="margin-bottom:15px">
-<button onclick="startStream()">▶️ Start Streaming</button>
-<button onclick="stopStream()">⏹️ Stop Streaming</button>
+<button onclick="startStream()">Start Streaming</button>
+<button onclick="stopStream()">Stop Streaming</button>
 </div>
 <div class="stream-container">
 <video id="streamVideo" class="stream-video" autoplay muted playsinline></video>
@@ -903,7 +915,7 @@ input::placeholder{color:rgba(255,255,255,0.5)}
 
 <div id="settings-page" class="page">
 <div class="grid">
-<div class="card"><h2>⚙️ System</h2><div class="btn-grid">
+<div class="card"><h2>System</h2><div class="btn-grid">
 <button onclick="send('open-settings')">Settings</button>
 <button onclick="send('open-wifi-settings')">WiFi</button>
 <button onclick="send('open-bluetooth-settings')">Bluetooth</button>
@@ -915,7 +927,7 @@ input::placeholder{color:rgba(255,255,255,0.5)}
 <button onclick="send('open-security-settings')">Security</button>
 <button onclick="send('open-developer-settings')">Developer</button>
 </div></div>
-<div class="card"><h2>📊 Device Info</h2><div id="deviceInfo"></div></div>
+<div class="card"><h2>Device Info</h2><div id="deviceInfo"></div></div>
 </div>
 </div>
 </div>
@@ -925,7 +937,6 @@ input::placeholder{color:rgba(255,255,255,0.5)}
 const socket = io({transports: ['websocket', 'polling']});
 let currentPage = 'main';
 let currentAIMode = 'chat';
-let typingInterval = null;
 
 function switchPage(page) {
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -967,17 +978,17 @@ async function sendAIMessage() {
             if (data.mode === 'chat') {
                 typeResponse(data.response);
             } else if (data.mode === 'search') {
-                addChatMessage('bot', `🔍 Searching: ${data.query}`);
+                addChatMessage('bot', 'Searching: ' + data.query);
                 displaySearchResults(data.results);
             } else {
-                addChatMessage('bot', `✅ ${data.command}\n${data.result || 'Done'}`);
+                addChatMessage('bot', data.command + '\n' + (data.result || 'Done'));
             }
         } else {
-            addChatMessage('bot', `❌ ${data.message}`);
+            addChatMessage('bot', data.message);
         }
     } catch(e) {
         removeTyping(typingId);
-        addChatMessage('bot', '❌ Connection error');
+        addChatMessage('bot', 'Connection error');
     }
 }
 
@@ -985,7 +996,6 @@ function typeResponse(text) {
     const container = document.getElementById('chatContainer');
     const div = document.createElement('div');
     div.className = 'chat-message chat-bot';
-    div.id = 'typing-' + Date.now();
     container.appendChild(div);
     
     let i = 0;
@@ -1032,13 +1042,13 @@ function displaySearchResults(results) {
         return;
     }
     
-    container.innerHTML = results.map(r => `
-        <div class="search-result" onclick="window.open('https://${r.link}', '_blank')">
-            <div style="font-weight:bold;margin-bottom:5px">${r.title}</div>
-            <div style="font-size:12px;opacity:0.7;margin-bottom:5px">${r.link}</div>
-            <div style="font-size:13px">${r.snippet}</div>
-        </div>
-    `).join('');
+    container.innerHTML = results.map(r => 
+        '<div class="search-result" onclick="window.open(\'https://' + r.link + '\', \'_blank\')">' +
+            '<div style="font-weight:bold;margin-bottom:5px">' + r.title + '</div>' +
+            '<div style="font-size:12px;opacity:0.7;margin-bottom:5px">' + r.link + '</div>' +
+            '<div style="font-size:13px">' + r.snippet + '</div>' +
+        '</div>'
+    ).join('');
 }
 
 async function webSearch() {
@@ -1052,7 +1062,7 @@ async function webSearch() {
         const res = await fetch('/api/search', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({query})
+            body: JSON.stringify({query: query})
         });
         const data = await res.json();
         displaySearchResults(data.results);
@@ -1074,7 +1084,7 @@ async function loadFiles(path) {
             const parent = path.split('/').slice(0, -1).join('/') || '/';
             const div = document.createElement('div');
             div.className = 'file-item';
-            div.innerHTML = '<span>📁 ..</span>';
+            div.innerHTML = '<span>..</span>';
             div.onclick = () => loadFiles(parent);
             list.appendChild(div);
         }
@@ -1092,7 +1102,7 @@ async function loadFiles(path) {
                 const isDir = perms.startsWith('d');
                 const div = document.createElement('div');
                 div.className = 'file-item';
-                div.innerHTML = `<span>${isDir ? '📁' : '📄'} ${name}</span>`;
+                div.innerHTML = '<span>' + (isDir ? '📁' : '📄') + ' ' + name + '</span>';
                 div.onclick = () => {
                     if (isDir) {
                         loadFiles(path + '/' + name);
@@ -1149,13 +1159,12 @@ async function loadDeviceInfo() {
         const res = await fetch('/api/device');
         const data = await res.json();
         const info = data.info.split('\n');
-        document.getElementById('deviceInfo').innerHTML = `
-            <p>📱 ${info[2] || 'Unknown'}</p>
-            <p>📱 Android ${info[1] || 'Unknown'}</p>
-            <p>🔋 ${data.battery}</p>
-            <p>💾 ${data.memory}</p>
-            <p>💿 ${data.storage}</p>
-        `;
+        document.getElementById('deviceInfo').innerHTML = 
+            '<p>' + (info[2] || 'Unknown') + '</p>' +
+            '<p>Android ' + (info[1] || 'Unknown') + '</p>' +
+            '<p>' + data.battery + '</p>' +
+            '<p>' + data.memory + '</p>' +
+            '<p>' + data.storage + '</p>';
     } catch(e) {}
 }
 
@@ -1174,7 +1183,7 @@ function addLog(l) {
     const container = document.getElementById('logContainer');
     const div = document.createElement('div');
     div.className = 'log-entry';
-    div.innerHTML = `<span class="log-time">[${new Date(l.timestamp).toLocaleTimeString()}]</span> <span class="log-${l.type}">${l.message}</span>`;
+    div.innerHTML = '<span class="log-time">[' + new Date(l.timestamp).toLocaleTimeString() + ']</span> <span class="log-' + l.type + '">' + l.message + '</span>';
     container.appendChild(div);
     container.scrollTop = container.scrollHeight;
     if (container.children.length > 50) {
@@ -1227,7 +1236,7 @@ socket.on('gatewayInfo', info => {
 socket.on('devicesUpdate', devices => {
     document.getElementById('deviceCount').textContent = '(' + devices.length + ')';
     document.getElementById('devicesList').innerHTML = devices.length ? 
-        devices.map(d => `<div class="device-item"><span class="device-online"></span><span style="flex:1">${d.ip}</span><span style="font-size:11px;opacity:0.5">${new Date(d.connectedAt).toLocaleTimeString()}</span></div>`).join('') :
+        devices.map(d => '<div class="device-item"><span class="device-online"></span><span style="flex:1">' + d.ip + '</span><span style="font-size:11px;opacity:0.5">' + new Date(d.connectedAt).toLocaleTimeString() + '</span></div>').join('') :
         '<div class="device-item" style="justify-content:center;opacity:0.7">No devices connected</div>';
 });
 socket.on('streamStatus', status => {
@@ -1253,7 +1262,7 @@ async function loadMainInfo() {
         const i = d.info.split('\n');
         document.getElementById('deviceModel').textContent = (i[2] || 'Android') + ' ' + (i[1] || '');
         const b = d.battery.match(/level: (\d+)/);
-        if (b) document.getElementById('batteryLevel').textContent = '🔋 ' + b[1] + '%';
+        if (b) document.getElementById('batteryLevel').textContent = b[1] + '%';
     } catch(e) {}
 }
 
@@ -1275,15 +1284,15 @@ chmod +x ~/.termux/boot/start-phone-server
 
 cat > "$SYSTEM_DIR/view_connections.sh" << 'EOF'
 #!/data/data/com.termux/files/usr/bin/bash
-echo "🥹 Connected Devices Log"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "Connected Devices Log"
+echo "================================================"
 if [ -f ~/phone_control_system/logs/connected_devices.json ]; then
     cat ~/phone_control_system/logs/connected_devices.json | node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8'));if(d.length===0){console.log('No devices')}else{d.forEach((x,i)=>{console.log((i+1)+'. IP: '+x.ip);console.log('   Connected: '+new Date(x.connectedAt).toLocaleString());if(x.disconnectedAt)console.log('   Disconnected: '+new Date(x.disconnectedAt).toLocaleString());console.log('')})}"
 else
     echo "No connections yet"
 fi
 echo ""
-echo "📋 Live Log:"
+echo "Live Log:"
 tail -f ~/phone_control_system/logs/phone_control.log | grep --line-buffered "Device"
 EOF
 chmod +x "$SYSTEM_DIR/view_connections.sh"
@@ -1300,16 +1309,16 @@ if [ -z "$GATEWAY_IP" ]; then
 fi
 
 echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "🥹 AUTO-INSTALLATION COMPLETE!"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "================================================"
+echo "AUTO-INSTALLATION COMPLETE!"
+echo "================================================"
 echo ""
-echo "🥹 Gateway URL: http://$GATEWAY_IP:3000"
+echo "Gateway URL: http://$GATEWAY_IP:3000"
 echo ""
-echo "📋 Copy this URL to other devices on this hotspot!"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "Copy this URL to other devices on this hotspot!"
+echo "================================================"
 echo ""
-echo "🚀 Starting server..."
+echo "Starting server..."
 echo ""
 
 cd "$SYSTEM_DIR/server"
