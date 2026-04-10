@@ -307,13 +307,26 @@ function startCasting() {
       castProcess = null;
     }
     const ip = getHotspotIP();
+    const screenCapture = spawn('adb', ['exec-out', 'screenrecord', '--output-format=h264', '-']);
     castProcess = spawn('ffmpeg', [
-      '-f', 'android_camera', '-i', '0', '-f', 'mpegts',
-      '-vcodec', 'mpeg1video', '-s', '1280x720', '-b:v', '1000k',
-      '-r', '30', '-bf', '0', '-codec:v', 'mpeg1video',
+      '-i', 'pipe:0',
+      '-f', 'mpegts',
+      '-vcodec', 'mpeg1video',
+      '-s', '1280x720',
+      '-b:v', '1000k',
+      '-r', '30',
+      '-bf', '0',
+      '-codec:v', 'mpeg1video',
       `http://${ip}:8082/screen`
     ]);
-    castProcess.on('error', reject);
+    screenCapture.stdout.pipe(castProcess.stdin);
+    castProcess.on('error', (err) => {
+      reject(err);
+    });
+    castProcess.on('close', () => {
+      isCasting = false;
+      io.emit('castStatus', { active: false });
+    });
     isCasting = true;
     io.emit('castStatus', { active: true, url: `http://${ip}:8082/screen` });
     resolve({ active: true, url: `http://${ip}:8082/screen` });
@@ -587,7 +600,7 @@ input::placeholder{color:rgba(255,255,255,0.5)}
 
 <div id="cast-page" class="page">
 <div class="card"><h2>📺 Screen Cast</h2><div class="btn-grid" style="margin-bottom:12px"><button onclick="startCast()">▶️ Start Casting</button><button onclick="stopCast()">⏹️ Stop Casting</button></div>
-<div class="cast-screen"><canvas id="castCanvas" class="cast-video"></canvas></div>
+<div class="cast-screen"><video id="castVideo" class="cast-video" autoplay muted playsinline></video></div>
 <div id="castUrl" style="margin-top:12px;font-family:monospace"></div></div>
 </div>
 
@@ -705,7 +718,6 @@ list.appendChild(div);
 }
 
 let castActive=false;
-let castStream=null;
 
 async function startCast(){
 try{
@@ -714,6 +726,9 @@ const data=await res.json();
 if(data.success){
 castActive=true;
 document.getElementById('castUrl').textContent='Cast URL: '+data.url;
+const video=document.getElementById('castVideo');
+video.src=data.url;
+video.play().catch(()=>{});
 }else{alert('Cast failed');}
 }catch(e){alert('Cast error');}
 }
@@ -723,6 +738,9 @@ try{
 await fetch('/api/cast/stop',{method:'POST'});
 castActive=false;
 document.getElementById('castUrl').textContent='';
+const video=document.getElementById('castVideo');
+video.pause();
+video.src='';
 }catch(e){}
 }
 
@@ -731,7 +749,14 @@ try{
 const res=await fetch('/api/cast/status');
 const data=await res.json();
 castActive=data.active;
-if(data.active)document.getElementById('castUrl').textContent='Cast URL: '+data.url;
+if(data.active){
+document.getElementById('castUrl').textContent='Cast URL: '+data.url;
+const video=document.getElementById('castVideo');
+if(video.src!==data.url){
+video.src=data.url;
+video.play().catch(()=>{});
+}
+}
 }catch(e){}
 }
 
@@ -783,80 +808,181 @@ socket.on('commandResult',d=>{addLog({timestamp:new Date().toISOString(),type:'s
 socket.on('gatewayInfo',info=>{document.getElementById('gatewayUrl').textContent=info.url;});
 socket.on('devicesUpdate',devices=>{
 document.getElementById('deviceCount').textContent=`(${devices.length})`;
-document.getElementById('devicesList').innerHTML=devices.length?devices.map(d=>`<div class="device-item"><span class="device-online"></span><span style="flex:1">${d.ip}</span><span style="font-size:11px;opacity:0.5">${new Date(d.connectedAt).toLocaleTimeString()}</span></div>`).join(''):'<div class="device-item" style="justify-content:center;opacity:0.7">No devices connected</div>';
+document`;
+document.getElementById('.getElementById('devicesdevicesList').List').innerHTML=devices.lengthinnerHTML=devices.length?devices.map(d=>`<?devices.map(d=>`<div classdiv class="device-item"><="device-item"><span class="devicespan class="device-online-online"></span"></span><span style="><spanflex: style="flex:1">${d1">${d.ip}</span><.ip}</span><span stylespan style="font="font-size:-size:11px11px;opacity:;opacity:0.5">${new0.5"> Date(d.connected${new Date(dAt)..connectedAt).toLocaleTimetoLocaleTimeString()}</String()}</span></div>`span></).join(''div>`).join):'(''):'<div class<div class="device-item" style="device-item" style="justify-content="justify-content:center;op:center;opacity:acity:0.0.7">7">No devicesNo devices connected</ connected</div>';
 });
-socket.on('castStatus',status=>{
-castActive=status.active;
-if(status.active)document.getElementById('castUrl').textContent='Cast URL: '+status.url;
+socketdiv>';
+});
+socket.on('.on('castStatus',status=>{
+castStatus',status=>{
+castActivecastActive=status.active;
+=statusif(status.active;
+if(status.active){
+document.getElementById.active){
+document.getElementById('cast('castUrl').textContent='Cast URL:Url').textContent='Cast URL: '+status '+status.url;
+.url;
+const videoconst video=document=document.getElementById('.getElementById('castVideo');
+ifcastVideo');
+if(video(video.src!==status.url){
+.src!==status.url){
+video.srcvideo.src=status=status.url;
+video.play.url;
+video.play().catch().catch(()=>{});
+}
+}else{
+document(()=>{});
+}
+}else{
+document.getElementById('castUrl').text.getElementById('castUrl').textContent='';
+const video=Content='';
+const video=document.getElementById('castVideo');
+document.getElementById('castVideo');
+video.pvideo.pause();
+video.srcause();
+video.src='';
+}
 });
 
-async function loadMainInfo(){
+='';
+}
+});
+
+async functionasync function loadMainInfo(){
 try{
-const r=await fetch('/api/device');
-const d=await r.json();
-const i=d.info.split('\n');
-document.getElementById('deviceModel').textContent=`${i[2]||'Android'} ${i[1]||''}`;
-const b=d.battery.match(/level: (\d+)/);
-if(b)document.getElementById('batteryLevel').textContent=`🔋 ${b[1]}%`;
+ loadMainInfo(){
+const r=awaittry{
+const r=await fetch('/api/ fetch('/api/device');
+const ddevice');
+const d=await r.json=await r.json();
+const();
+const i=d i=d.info.split('\n');
+document.info.split('\n');
+document.getElementById('.getElementById('deviceModeldeviceModel').text').textContent=`${i[2Content=`${i[2]||'Android'} ${i]||'Android'} ${i[1][1]||''}`;
+||''}`;
+const b=d.bconst b=d.battery.matchattery.match(/level: (\(/level: (\d+)/);
+d+)/);
+if(b)documentif(b).getElementById('document.getElementById('batteryLevel').batteryLevel').textContent=`textContent=`🔋 ${b[1]}🔋 ${b%`;
+}catch[1]}(e){%`;
 }catch(e){}
 }
 
-setInterval(loadMainInfo,30000);
+}
+}
+
+setIntervalsetInterval(loadMainInfo(loadMainInfo,30000);
+setInterval(checkCastStatus,5000,30000);
 setInterval(checkCastStatus,5000);
+loadMainInfo);
 loadMainInfo();
 </script>
-</body></html>
+();
+</script>
+</body</body></html></html>
+EOF>
 EOFHTML
 
-mkdir -p ~/.termux/boot
-cat > ~/.termux/boot/start-phone-server << 'EOF'
-#!/data/data/com.termux/files/usr/bin/bash
-cd ~/phone_server
-npm install --silent express socket.io fluent-ffmpeg duck-duck-scrape 2>/dev/null
-node server.js > /dev/null 2>&1 &
-EOF
-chmod +x ~/.termux/boot/start-phone-server
+mkdir -p ~HTML
 
-cat > ~/view_connections.sh << 'EOF'
-#!/data/data/com.termux/files/usr/bin/bash
-echo "🥹 Connected Devices Log"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-if [ -f ~/connected_devices.json ]; then
-    cat ~/connected_devices.json | node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8'));if(d.length===0){console.log('No devices')}else{d.forEach((x,i)=>{console.log(\`\${i+1}. IP: \${x.ip}\`);console.log(\`   Connected: \${new Date(x.connectedAt).toLocaleString()}\`);if(x.disconnectedAt)console.log(\`   Disconnected: \${new Date(x.disconnectedAt).toLocaleString()}\`);console.log('')})}"
+mkdir -p ~/.termux/boot
+/.termux/boot
+cat > ~/.cat > ~/.termux/boottermux/start-phone/boot/start-phone-server <<-server << 'EOF 'EOF'
+#!/data/data'
+#!/data/data/com.termux/com.termux/files//files/usr/bin/bash
+cd ~usr/bin/bash
+cd ~/phone_server
+/phone_server
+npm installnpm install --silent express socket.io --silent express socket.io fluent-ffm fluent-ffmpeg duck-duckpeg duck-duck-scrape-scrape 2>/dev 2>/dev/null
+/null
+node server.js >node server.js > /dev /dev/null /null 2>&2>&1 &
+EOF
+1 &
+EOF
+chmodchmod +x +x ~/. ~/.termuxtermux/boot/boot/start-phone-server
+
+/start-phonecat >-server
+
+cat > ~/ ~/view_connections.sh << 'view_connections.sh << 'EOF'
+EOF'
+#!/data#!/data/data/com/data/com.term.termux/files/usrux/files/usr/bin/bash/bin/bash
+echo "
+echo🥹 Connected Devices "🥹 Connected Log"
+echo "━━ Devices Log"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+if━━"
+ [ -fif [ -f ~/ ~/connected_devconnected_devices.json ]; thenices.json
+    cat ~ ]; then
+    cat ~/connected/connected_devices_devices.json |.json | node -e " node -const de "const d=JSON.parse(=JSON.parse(require('fs').require('fsreadFile').readFileSync(Sync(0,'0,'utf8utf8'));'));if(dif(d.length===0){console.log.length===0){('No devices')console.log('No}else devices')}else{d.forEach{d.forEach((x,i)=((x,i)=>{console.log(\`\>{console.log(\`\${i${i+1+1}. IP: \}. IP: \${x${x.ip}\.ip}\`);console.log(\``);console.log(\`   Connected: \   Connected: \${new${new Date(x Date(x.connected.connectedAt).toLocaleString()At).toLocaleString()}\`}\`);if(x.dis);if(x.disconnectedAt)console.log(\connectedAt)console.log(\`  `   Disconnected Disconnected: \${new: \${new Date(x.disconnectedAt). Date(x.disconnectedAt).toLocaletoLocaleString()String()}\`);console}\`);console.log('')}).log('')})}"
 else
-    echo "No connections yet"
+    echo "}"
+else
+    echo "No connectionsNo connections yet"
+ yet"
 fi
 echo ""
-echo "📋 Live Log:"
-tail -f ~/phone_control.log | grep --line-buffered "Device"
+fi
+echo ""
+echo "📋echo "📋 Live Log:"
+ Live Log:"
+tail -tail -f ~/phonef ~/phone_control.log |_control.log | grep --line-b grep --line-buffereduffered "Device "Device"
+EOF"
 EOF
-chmod +x ~/view_connections.sh
+ch
+chmod +mod +x ~/viewx ~_connections.sh
 
-cd ~/phone_server
-npm install --silent express socket.io fluent-ffmpeg duck-duck-scrape 2>/dev/null
+/view_connections.sh
 
-GATEWAY_IP=$(ip route get 1 2>/dev/null | grep -oP 'src \K\S+' | head -1)
-if [ -z "$GATEWAY_IP" ]; then
-    GATEWAY_IP=$(ifconfig wlan0 2>/dev/null | grep 'inet ' | awk '{print $2}')
+cd ~/phonecd ~/phone_server
+_server
+npm installnpm install --silent express --silent express socket.io socket.io fluent-ffmpeg duck fluent-ffmpeg duck-duck-duck-scrape 2-scrape 2>/dev/null
+
+>/dev/null
+
+GATEGATEWAY_WAY_IP=$(ip route get IP=$(ip route1  get 1 2>/2>/dev/null | grepdev/null -o | grep -oP 'src \K\P 'src \K\S+' |S+' head -1 | head -1)
+if [ -z "$)
+if [ -GATEz "$GATEWAY_WAY_IP"IP" ]; then ]; then
+   
+    GATE GATEWAY_WAY_IP=$(IP=$(ifconfig wlanifconfig wlan0 2>/0 2>/dev/null | grepdev/null | grep 'inet ' | 'inet ' | awk '{ awk '{print $2}')
+print $2}')
 fi
-if [ -z "$GATEWAY_IP" ]; then
-    GATEWAY_IP="192.168.43.1"
+fi
+ifif [ -z "$G [ -z "$GATEWAYATEWAY_IP_IP" ];" ]; then
+ then
+    G    GATEWAYATEWAY__IP="192IP="192.168.43.168.43.1.1"
+fi"
 fi
 
-~/.phone_control.sh hotspot on 2>/dev/null || true
+~/
+
+~/phone_phone_control.shcontrol.sh hotspot on hotspot on 2 2>/dev/null || true
+>/dev/null || true
 sleep 3
 
 echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "🥹 AUTO-INSTALLATION COMPLETE!"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+sleep 3
+
 echo ""
-echo "🥹 Gateway URL: http://$GATEWAY_IP:3000"
+echo "echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo"
+echo "🥹 AUTO "🥹 AUTO-INST-INSTALLATION COMPLETE!"
+ALLATION COMPLecho "ETE!"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo"
 echo ""
-echo "📋 Copy this URL to other devices on this hotspot!"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
+echo "🥹 "🥹 Gateway URL Gateway URL: http://: http://$G$GATEWAYATEWAY_IP_IP:300:3000"
+0"
+echo ""
+echo ""
+echo "echo "📋📋 Copy this Copy this URL to URL to other devices on this other devices on this hotspot hotspot!"
+echo "━━━━!"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+echo"
+echo ""
+echo " "🚀 Starting server..."
 echo "🚀 Starting server..."
 echo ""
 
-node server.js
+node"
+
+node server.js server.js
