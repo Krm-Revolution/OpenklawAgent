@@ -6,27 +6,28 @@ export LC_ALL=C
 
 clear
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "                    PHONE GATEWAY CONTROLLER v4.0"
-echo "                 Shizuku | AI Agent | Hotspot Ready"
+echo "                    PHONE GATEWAY CONTROLLER v5.0"
+echo "                 Fixed Network | Connection Logs | Fast Access"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
 pkill -f "node.*gateway" 2>/dev/null || true
 pkill -f "http-server" 2>/dev/null || true
+pkill -f "python.*http.server" 2>/dev/null || true
 
-echo "[1/8] Installing system packages..."
+echo "[1/7] Installing packages..."
 pkg update -y 2>&1 | grep -E "(Reading|Building)" || true
-pkg install -y nodejs python git curl jq termux-api net-tools 2>&1 | grep -E "(Setting up|Unpacking)" || true
+pkg install -y nodejs python git curl jq termux-api net-tools nmap dnsutils 2>&1 | grep -E "(Setting up|Unpacking)" || true
 pip install requests 2>/dev/null || true
 echo ""
 
-echo "[2/8] Creating project structure..."
+echo "[2/7] Creating project..."
 rm -rf ~/phonegate 2>/dev/null || true
 mkdir -p ~/phonegate/{web,data,scripts}
 cd ~/phonegate
 echo ""
 
-echo "[3/8] Setting up Shizuku integration..."
+echo "[3/7] Shizuku setup..."
 termux-setup-storage 2>/dev/null || true
 sleep 1
 
@@ -47,10 +48,10 @@ RISH
 chmod +x "${BIN}/rish"
 SHIZUKU
 chmod +x ~/phonegate/shizuku_setup.sh
-bash ~/phonegate/shizuku_setup.sh
+bash ~/phonegate/shizuku_setup.sh 2>/dev/null || true
 echo ""
 
-echo "[4/8] Creating phone controller..."
+echo "[4/7] Creating controller..."
 cat > ~/phonegate/control.sh << 'CONTROL'
 #!/data/data/com.termux/files/usr/bin/bash
 exec_cmd() {
@@ -93,205 +94,181 @@ case "$1" in
     info) exec_cmd "getprop ro.product.model && getprop ro.build.version.release" ;;
     ui) exec_cmd "uiautomator dump /sdcard/ui.xml && cat /sdcard/ui.xml" ;;
     shell) exec_cmd "$2" ;;
-    agent) python3 ~/phonegate/scripts/phone_agent.py "$2" ;;
     *) echo "Unknown: $1" ;;
 esac
 CONTROL
 chmod +x ~/phonegate/control.sh
 echo ""
 
-echo "[5/8] Creating AI Phone Agent..."
-cat > ~/phonegate/scripts/phone_agent.py << 'AGENT'
-#!/data/data/com.termux/files/usr/bin/python3
-import subprocess, base64, json, sys, time, os, re
-from urllib.request import Request, urlopen
-MODEL = "gemini-2.5-flash-lite"
-MAX_STEPS = 25
-SCREENSHOT_PATH = "/sdcard/agent_screen.png"
-TELEGRAM_BOT_TOKEN = ""
-TELEGRAM_CHAT_ID = ""
-SEND_TELEGRAM_UPDATES = False
-
-def load_api_key():
-    config_path = os.path.expanduser("~/.phonegate/config.json")
-    try:
-        with open(config_path) as f:
-            data = json.load(f)
-            return data.get("gemini_api_key", "")
-    except:
-        pass
-    return os.environ.get("GEMINI_API_KEY", "")
-
-def run_cmd(cmd):
-    try:
-        result = subprocess.run(["rish", "-c", cmd], capture_output=True, text=True, timeout=15)
-        return result.stdout.strip()
-    except:
-        return ""
-
-def take_screenshot():
-    run_cmd(f"screencap -p {SCREENSHOT_PATH}")
-    time.sleep(0.3)
-    with open(SCREENSHOT_PATH, "rb") as f:
-        return base64.b64encode(f.read()).decode()
-
-def get_ui_elements():
-    run_cmd("uiautomator dump /sdcard/ui.xml")
-    time.sleep(0.5)
-    xml = run_cmd("cat /sdcard/ui.xml")
-    if not xml: return []
-    elements = []
-    pattern = r'<node[^>]*?text="(?P<text>[^"]*)"[^>]*?resource-id="(?P<rid>[^"]*)"[^>]*?class="(?P<cls>[^"]*)"[^>]*?content-desc="(?P<desc>[^"]*)"[^>]*?clickable="(?P<click>[^"]*)"[^>]*?bounds="\[(?P<x1>\d+),(?P<y1>\d+)\]\[(?P<x2>\d+),(?P<y2>\d+)\]"'
-    for m in re.finditer(pattern, xml):
-        text = m.group("text") or m.group("desc")
-        rid = m.group("rid")
-        clickable = m.group("click") == "true"
-        x1, y1 = int(m.group("x1")), int(m.group("y1"))
-        x2, y2 = int(m.group("x2")), int(m.group("y2"))
-        cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
-        if text or (clickable and rid):
-            elements.append({"label": text, "clickable": clickable, "center": [cx, cy], "bounds": [x1, y1, x2, y2], "type": m.group("cls").split(".")[-1]})
-    return elements
-
-def execute_action(action):
-    atype = action.get("action", "")
-    if atype == "tap": run_cmd(f"input tap {int(action['x'])} {int(action['y'])}")
-    elif atype == "swipe": run_cmd(f"input swipe {int(action['x1'])} {int(action['y1'])} {int(action['x2'])} {int(action['y2'])} {int(action.get('duration', 300))}")
-    elif atype == "type":
-        text = action.get("text", "").replace(" ", "%s").replace("'", "\\'")
-        run_cmd(f"input text '{text}'")
-    elif atype == "key": run_cmd(f"input keyevent {int(action.get('code', 0))}")
-    elif atype == "open_app": run_cmd(f"monkey -p {action.get('package', '')} 1")
-    elif atype == "wait": time.sleep(float(action.get("seconds", 1)))
-    elif atype == "scroll_down": run_cmd("input swipe 540 1600 540 600 300")
-    elif atype == "scroll_up": run_cmd("input swipe 540 600 540 1600 300")
-    elif atype == "go_home": run_cmd("input keyevent 3")
-    elif atype == "go_back": run_cmd("input keyevent 4")
-    elif atype == "done": return "done"
-    return "continue"
-
-SYSTEM_PROMPT = """You are an Android phone agent. Output JSON with "thought" and "actions" array.
-Available actions: tap (x,y), swipe (x1,y1,x2,y2,duration), type (text), key (code:3=HOME,4=BACK,66=ENTER), open_app (package), wait (seconds), scroll_down, scroll_up, go_home, go_back, done (message).
-Common packages: com.whatsapp, com.instagram.android, com.google.android.youtube, com.android.chrome.
-Screen: 1080x2240. Status bar y<80, center (540,1120), nav bar y>2000."""
-
-def call_gemini(api_key, parts):
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent?key={api_key}"
-    payload = {"systemInstruction": {"parts": [{"text": SYSTEM_PROMPT}]}, "contents": [{"parts": parts}], "generationConfig": {"temperature": 0.2, "maxOutputTokens": 1024, "responseMimeType": "application/json"}}
-    req = Request(url, data=json.dumps(payload).encode(), method="POST")
-    req.add_header("Content-Type", "application/json")
-    with urlopen(req, timeout=60) as r:
-        text = json.loads(r.read())["candidates"][0]["content"]["parts"][0]["text"]
-    if text.startswith("```"): text = re.sub(r'^```\w*\n?', '', text); text = re.sub(r'\n?```$', '', text)
-    return json.loads(text)
-
-def main():
-    global TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, SEND_TELEGRAM_UPDATES
-    config_path = os.path.expanduser("~/.phonegate/config.json")
-    if os.path.exists(config_path):
-        with open(config_path) as f:
-            cfg = json.load(f)
-            TELEGRAM_BOT_TOKEN = cfg.get("telegram_bot_token", "")
-            TELEGRAM_CHAT_ID = cfg.get("telegram_chat_id", "")
-            SEND_TELEGRAM_UPDATES = cfg.get("telegram_enabled", False)
-    
-    args = sys.argv[1:]
-    if "--notify" in args:
-        SEND_TELEGRAM_UPDATES = True
-        args.remove("--notify")
-    if not args:
-        print("Usage: python3 phone_agent.py [--notify] \"<task>\"")
-        return
-    
-    task = " ".join(args)
-    api_key = load_api_key()
-    if not api_key:
-        print("ERROR: No API key. Configure in Settings.")
-        return
-    
-    print(f"Agent starting: {task}")
-    parts = []
-    for step in range(1, MAX_STEPS + 1):
-        print(f"Step {step}/{MAX_STEPS}")
-        b64 = take_screenshot()
-        ui_elements = get_ui_elements()
-        ui_text = "\n".join([f"[{i}] {e['label']} ({e['center'][0]},{e['center'][1]})" for i, e in enumerate(ui_elements[:30])])
-        msg = f"TASK: {task}\nStep {step}\nUI Elements:\n{ui_text}"
-        parts = [{"inline_data": {"mimeType": "image/png", "data": b64}}, {"text": msg}]
-        resp = call_gemini(api_key, parts)
-        print(f"Thought: {resp.get('thought', '')}")
-        for action in resp.get("actions", []):
-            if execute_action(action) == "done":
-                print(f"Done: {action.get('message', 'Complete')}")
-                return
-            time.sleep(0.5)
-        time.sleep(1)
-    print("Max steps reached")
-
-if __name__ == "__main__":
-    main()
-AGENT
-chmod +x ~/phonegate/scripts/phone_agent.py
-echo ""
-
-echo "[6/8] Creating gateway server..."
+echo "[5/7] Creating gateway server with fixed network..."
 cat > ~/phonegate/server.js << 'SERVER'
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const { exec } = require('child_process');
+const { exec, execSync } = require('child_process');
+const os = require('os');
 
 const PORT = process.env.PORT || 3000;
 const controlScript = path.join(__dirname, 'control.sh');
 const connections = new Map();
 let requestCount = 0;
+let startTime = Date.now();
 
-const mimeTypes = {'.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.json': 'application/json', '.svg': 'image/svg+xml'};
+const mimeTypes = {
+    '.html': 'text/html',
+    '.css': 'text/css',
+    '.js': 'text/javascript',
+    '.json': 'application/json',
+    '.svg': 'image/svg+xml',
+    '.png': 'image/png',
+    '.ico': 'image/x-icon'
+};
 
-function getLocalIP() {
-    return new Promise((resolve) => {
-        exec("ip addr show wlan0 2>/dev/null | grep 'inet ' | awk '{print $2}' | cut -d/ -f1", (e1, ip1) => {
-            if (ip1 && ip1.trim()) return resolve(ip1.trim());
-            exec("ip addr show ap0 2>/dev/null | grep 'inet ' | awk '{print $2}' | cut -d/ -f1", (e2, ip2) => {
-                if (ip2 && ip2.trim()) return resolve(ip2.trim());
-                exec("ip route get 1 2>/dev/null | grep -oP 'src \\K\\S+'", (e3, ip3) => {
-                    resolve(ip3 && ip3.trim() ? ip3.trim() : '192.168.43.1');
-                });
-            });
-        });
-    });
+function getAllNetworkIPs() {
+    const interfaces = os.networkInterfaces();
+    const ips = [];
+    
+    for (const name of Object.keys(interfaces)) {
+        for (const iface of interfaces[name]) {
+            if (iface.family === 'IPv4' && !iface.internal) {
+                ips.push({ name, ip: iface.address });
+            }
+        }
+    }
+    return ips;
 }
 
-function logConnection(ip, msg) {
-    const time = new Date().toLocaleTimeString();
-    console.log(`[${time}] ${ip} - ${msg}`);
+function getBestIP() {
+    const ips = getAllNetworkIPs();
+    
+    for (const {name, ip} of ips) {
+        if (name.includes('wlan') || name.includes('ap') || name.includes('hotspot')) {
+            return ip;
+        }
+    }
+    
+    for (const {name, ip} of ips) {
+        if (ip.startsWith('192.168.')) {
+            return ip;
+        }
+    }
+    
+    try {
+        const route = execSync("ip route get 1 2>/dev/null | grep -oP 'src \\K\\S+'", {shell: '/bin/bash'}).toString().trim();
+        if (route) return route;
+    } catch(e) {}
+    
+    return ips.length > 0 ? ips[0].ip : '0.0.0.0';
+}
+
+function formatBytes(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+function logConnection(ip, msg, details = '') {
+    const time = new Date().toLocaleTimeString('en-US', { hour12: false });
+    const conn = connections.get(ip);
+    const reqCount = conn ? conn.requests : 0;
+    
+    const symbols = {
+        'CONNECT': '🟢',
+        'COMMAND': '⚡',
+        'STATUS': '📊',
+        'DISCONNECT': '🔴',
+        'ERROR': '❌'
+    };
+    
+    const symbol = symbols[msg] || '📡';
+    console.log(`[${time}] ${symbol} ${ip} | ${msg}${details ? ' | ' + details : ''} | reqs: ${reqCount}`);
+    
+    if (msg === 'CONNECT') {
+        console.log(`         └─ User-Agent: ${details.substring(0, 50)}`);
+    }
 }
 
 function execCommand(cmd, args = '') {
     return new Promise((resolve) => {
-        exec(`bash ${controlScript} ${cmd} ${args}`, { timeout: 15000 }, (err, stdout, stderr) => {
-            resolve(err ? `Error: ${err.message}` : (stdout || stderr || 'Done'));
+        const fullCmd = `bash ${controlScript} ${cmd} ${args} 2>&1`;
+        exec(fullCmd, { timeout: 15000, maxBuffer: 1024 * 1024 }, (err, stdout, stderr) => {
+            if (err) {
+                resolve(`Error: ${err.message}`);
+            } else {
+                resolve(stdout || stderr || 'Command executed successfully');
+            }
         });
     });
 }
 
 const server = http.createServer(async (req, res) => {
-    const clientIP = (req.headers['x-forwarded-for'] || req.connection.remoteAddress || 'unknown').replace('::ffff:', '');
+    const clientIP = (req.headers['x-forwarded-for'] || 
+                      req.connection.remoteAddress || 
+                      req.socket.remoteAddress || 
+                      'unknown').replace('::ffff:', '').replace('::1', '127.0.0.1');
+    
     requestCount++;
     
-    if (!connections.has(clientIP)) {
-        connections.set(clientIP, { firstSeen: new Date(), requests: 0 });
-        logConnection(clientIP, 'NEW CONNECTION');
+    const isNew = !connections.has(clientIP);
+    if (isNew) {
+        connections.set(clientIP, { 
+            firstSeen: new Date(), 
+            requests: 0,
+            userAgent: req.headers['user-agent'] || 'Unknown',
+            lastSeen: new Date()
+        });
+        logConnection(clientIP, 'CONNECT', req.headers['user-agent'] || '');
     }
-    connections.get(clientIP).requests++;
+    
+    const connData = connections.get(clientIP);
+    connData.requests++;
+    connData.lastSeen = new Date();
+    
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    
+    if (req.method === 'OPTIONS') {
+        res.writeHead(204);
+        res.end();
+        return;
+    }
     
     const url = new URL(req.url, `http://${req.headers.host}`);
     
     if (url.pathname === '/api/status') {
+        logConnection(clientIP, 'STATUS');
         const battery = await execCommand('battery');
         const info = await execCommand('info');
+        const networkIPs = getAllNetworkIPs();
+        
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ battery, info, status: 'online' }));
+        res.end(JSON.stringify({ 
+            battery, 
+            info, 
+            status: 'online',
+            uptime: Math.floor((Date.now() - startTime) / 1000),
+            connections: connections.size,
+            totalRequests: requestCount,
+            network: networkIPs,
+            serverIP: getBestIP()
+        }));
+        return;
+    }
+    
+    if (url.pathname === '/api/connections') {
+        const connList = [];
+        connections.forEach((data, ip) => {
+            connList.push({
+                ip,
+                requests: data.requests,
+                firstSeen: data.firstSeen,
+                lastSeen: data.lastSeen,
+                userAgent: data.userAgent
+            });
+        });
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ connections: connList, total: connections.size }));
         return;
     }
     
@@ -301,11 +278,12 @@ const server = http.createServer(async (req, res) => {
         req.on('end', async () => {
             try {
                 const { cmd, args } = JSON.parse(body);
-                logConnection(clientIP, `Command: ${cmd} ${args || ''}`);
+                logConnection(clientIP, 'COMMAND', `${cmd} ${args || ''}`);
                 const result = await execCommand(cmd, args);
                 res.writeHead(200, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ result }));
+                res.end(JSON.stringify({ result, timestamp: Date.now() }));
             } catch (e) {
+                logConnection(clientIP, 'ERROR', e.message);
                 res.writeHead(400);
                 res.end(JSON.stringify({ error: 'Invalid request' }));
             }
@@ -314,14 +292,19 @@ const server = http.createServer(async (req, res) => {
     }
     
     if (url.pathname === '/api/config') {
+        const configPath = path.join(require('os').homedir(), '.phonegate/config.json');
         if (req.method === 'GET') {
-            const configPath = path.join(require('os').homedir(), '.phonegate/config.json');
             if (fs.existsSync(configPath)) {
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(fs.readFileSync(configPath));
             } else {
                 res.writeHead(200, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ gemini_api_key: '', telegram_bot_token: '', telegram_chat_id: '', telegram_enabled: false }));
+                res.end(JSON.stringify({ 
+                    gemini_api_key: '', 
+                    telegram_bot_token: '', 
+                    telegram_chat_id: '', 
+                    telegram_enabled: false 
+                }));
             }
         } else if (req.method === 'POST') {
             let body = '';
@@ -329,7 +312,8 @@ const server = http.createServer(async (req, res) => {
             req.on('end', () => {
                 const configDir = path.join(require('os').homedir(), '.phonegate');
                 if (!fs.existsSync(configDir)) fs.mkdirSync(configDir, { recursive: true });
-                fs.writeFileSync(path.join(configDir, 'config.json'), body);
+                fs.writeFileSync(configPath, body);
+                logConnection(clientIP, 'CONFIG', 'Settings updated');
                 res.writeHead(200);
                 res.end(JSON.stringify({ saved: true }));
             });
@@ -338,507 +322,440 @@ const server = http.createServer(async (req, res) => {
     }
     
     if (url.pathname === '/api/commands') {
-        const commands = ['tap', 'swipe', 'text', 'key', 'home', 'back', 'recent', 'power', 'volup', 'voldown', 'screenshot', 'openapp', 'openurl', 'battery', 'brightness', 'volume', 'wifi_on', 'wifi_off', 'bluetooth_on', 'bluetooth_off', 'location_on', 'location_off', 'flashlight_on', 'flashlight_off', 'notify', 'vibrate', 'clipboard', 'applist', 'info', 'ui', 'shell', 'agent'];
+        const commands = [
+            'tap [x] [y]', 'swipe [x1] [y1] [x2] [y2] [dur]', 'text [content]', 
+            'key [code]', 'home', 'back', 'recent', 'power', 'volup', 'voldown',
+            'screenshot', 'openapp [package]', 'openurl [url]', 'battery',
+            'brightness [0-255]', 'volume [0-15]', 'wifi_on', 'wifi_off',
+            'bluetooth_on', 'bluetooth_off', 'location_on', 'location_off',
+            'flashlight_on', 'flashlight_off', 'notify [title] [msg]',
+            'vibrate [ms]', 'clipboard', 'applist', 'info', 'ui', 'shell [cmd]'
+        ];
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ commands }));
         return;
     }
     
     let filePath = path.join(__dirname, 'web', url.pathname === '/' ? 'index.html' : url.pathname);
+    
     fs.readFile(filePath, (err, content) => {
         if (err) {
             res.writeHead(404);
-            res.end('Not Found');
+            res.end('404 Not Found');
         } else {
-            res.writeHead(200, { 'Content-Type': mimeTypes[path.extname(filePath)] || 'text/plain' });
+            const ext = path.extname(filePath);
+            res.writeHead(200, { 
+                'Content-Type': mimeTypes[ext] || 'text/plain',
+                'Cache-Control': 'no-cache'
+            });
             res.end(content);
         }
     });
 });
 
-server.listen(PORT, '0.0.0.0', async () => {
-    const ip = await getLocalIP();
-    console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('PHONE GATEWAY ONLINE');
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log(`Gateway URL: http://${ip}:${PORT}`);
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('\nWaiting for connections...\n');
+server.on('error', (err) => {
+    console.error('Server error:', err);
+    if (err.code === 'EADDRINUSE') {
+        console.log(`Port ${PORT} is in use. Trying ${PORT + 1}...`);
+        server.listen(PORT + 1, '0.0.0.0');
+    }
+});
+
+server.listen(PORT, '0.0.0.0', () => {
+    const ip = getBestIP();
+    const allIPs = getAllNetworkIPs();
+    
+    console.log('');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('                    🔥 PHONE GATEWAY ONLINE 🔥');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('');
+    console.log('📡 ACCESS URLs (use these from other devices):');
+    console.log('');
+    
+    allIPs.forEach(({name, ip}) => {
+        console.log(`   ▶ http://${ip}:${PORT}  (${name})`);
+    });
+    
+    console.log('');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('📊 Server Status:');
+    console.log(`   • Port: ${PORT}`);
+    console.log(`   • Interface: 0.0.0.0 (all interfaces)`);
+    console.log(`   • Started: ${new Date().toLocaleString()}`);
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('');
+    console.log('📱 Connection Instructions:');
+    console.log('   1. Enable Hotspot on this device');
+    console.log('   2. Connect other devices to this hotspot');
+    console.log('   3. Open any URL above in browser');
+    console.log('');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('📊 Waiting for connections... (logs will appear below)');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('');
 });
 
 setInterval(() => {
+    const now = Date.now();
+    const toRemove = [];
+    
+    connections.forEach((data, ip) => {
+        if (now - data.lastSeen > 300000) {
+            toRemove.push(ip);
+        }
+    });
+    
+    toRemove.forEach(ip => {
+        logConnection(ip, 'DISCONNECT', 'timeout');
+        connections.delete(ip);
+    });
+    
     if (connections.size > 0) {
-        console.log(`\nActive: ${connections.size} | Requests: ${requestCount}`);
-        connections.forEach((d, ip) => console.log(`  ${ip}: ${d.requests} requests`));
+        console.log('');
+        console.log(`[${new Date().toLocaleTimeString()}] 📊 ACTIVE SESSIONS: ${connections.size} | Total Requests: ${requestCount}`);
+        connections.forEach((data, ip) => {
+            console.log(`   └─ ${ip} | ${data.requests} requests | Last: ${data.lastSeen.toLocaleTimeString()}`);
+        });
         console.log('');
     }
 }, 30000);
+
+process.on('SIGINT', () => {
+    console.log('\nShutting down gateway...');
+    process.exit(0);
+});
 SERVER
 echo ""
 
-echo "[7/8] Creating web interface with SVG icons..."
+echo "[6/7] Creating web interface..."
 cat > ~/phonegate/web/index.html << 'HTML'
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
-    <title>Phone Gateway</title>
+    <title>Phone Gateway v5</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(145deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
             padding: 16px;
         }
-        .container { max-width: 1400px; margin: 0 auto; }
-        
-        nav {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 20px;
-            flex-wrap: wrap;
-        }
-        .nav-btn {
-            background: rgba(255,255,255,0.1);
-            border: 1px solid rgba(255,255,255,0.2);
-            color: white;
-            padding: 12px 20px;
-            border-radius: 50px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 500;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            transition: all 0.2s;
-            backdrop-filter: blur(10px);
-        }
-        .nav-btn svg { width: 20px; height: 20px; fill: currentColor; }
-        .nav-btn.active { background: #6366f1; border-color: #818cf8; }
-        .nav-btn:hover { background: rgba(255,255,255,0.2); }
-        
-        .page { display: none; }
-        .page.active { display: block; }
+        .container { max-width: 1200px; margin: 0 auto; }
         
         .header {
-            background: rgba(255,255,255,0.08);
-            backdrop-filter: blur(20px);
+            background: rgba(255,255,255,0.95);
             padding: 20px 24px;
-            border-radius: 24px;
+            border-radius: 16px;
             margin-bottom: 20px;
-            border: 1px solid rgba(255,255,255,0.1);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
         }
         .header h1 {
-            font-size: clamp(1.5rem, 5vw, 2.2rem);
-            background: linear-gradient(135deg, #a78bfa, #c4b5fd);
+            font-size: 1.8rem;
+            background: linear-gradient(135deg, #667eea, #764ba2);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
-            margin-bottom: 8px;
         }
-        .header p { color: #a1a1aa; }
+        .header p { color: #666; margin-top: 4px; }
         
         .status-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
             gap: 12px;
             margin-bottom: 20px;
         }
-        .status-card {
-            background: rgba(255,255,255,0.08);
-            backdrop-filter: blur(20px);
-            padding: 18px;
-            border-radius: 18px;
-            border: 1px solid rgba(255,255,255,0.1);
+        .stat-card {
+            background: rgba(255,255,255,0.95);
+            padding: 16px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
         }
-        .status-card h3 {
-            color: #a1a1aa;
-            font-size: 13px;
-            font-weight: 500;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 8px;
-        }
-        .status-card p {
-            color: white;
-            font-size: 1.4rem;
-            font-weight: 600;
-        }
-        .status-card .online { color: #4ade80; }
-        .status-card .offline { color: #f87171; }
+        .stat-label { font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
+        .stat-value { font-size: 1.6rem; font-weight: bold; color: #333; }
+        .online { color: #10b981 !important; }
+        .offline { color: #ef4444 !important; }
         
         .panel {
-            background: rgba(255,255,255,0.08);
-            backdrop-filter: blur(20px);
-            padding: 24px;
-            border-radius: 24px;
-            border: 1px solid rgba(255,255,255,0.1);
+            background: rgba(255,255,255,0.95);
+            padding: 20px;
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
             margin-bottom: 20px;
         }
         .panel h2 {
-            color: white;
             font-size: 1.2rem;
-            margin-bottom: 20px;
+            color: #333;
+            margin-bottom: 16px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #667eea;
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
         }
-        .panel h2 svg { width: 24px; height: 24px; fill: #a78bfa; }
         
         .btn-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
             gap: 10px;
         }
         .btn {
-            background: rgba(255,255,255,0.1);
-            border: 1px solid rgba(255,255,255,0.15);
+            background: linear-gradient(135deg, #667eea, #764ba2);
             color: white;
-            padding: 14px 12px;
-            border-radius: 14px;
-            cursor: pointer;
+            border: none;
+            padding: 14px 8px;
+            border-radius: 10px;
             font-size: 13px;
             font-weight: 500;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 8px;
-            transition: all 0.2s;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 0 4px 10px rgba(102, 126, 234, 0.3);
         }
-        .btn svg { width: 24px; height: 24px; fill: #a78bfa; }
-        .btn:hover { background: #6366f1; border-color: #818cf8; }
-        .btn:hover svg { fill: white; }
+        .btn:hover { transform: translateY(-2px); box-shadow: 0 6px 15px rgba(102, 126, 234, 0.4); }
+        .btn:active { transform: translateY(0); }
         
-        .input-row {
+        .input-group {
             display: flex;
             flex-wrap: wrap;
             gap: 10px;
-            margin-bottom: 16px;
+            margin-bottom: 12px;
         }
-        .input-row input, .input-row textarea {
+        .input-group input {
             flex: 1;
-            min-width: 150px;
-            padding: 14px 18px;
-            background: rgba(0,0,0,0.3);
-            border: 1px solid rgba(255,255,255,0.2);
-            border-radius: 14px;
-            color: white;
+            min-width: 120px;
+            padding: 12px 16px;
+            border: 2px solid #e5e7eb;
+            border-radius: 10px;
             font-size: 14px;
+            transition: border-color 0.2s;
         }
-        .input-row input::placeholder { color: #71717a; }
-        .input-row button {
-            padding: 14px 28px;
-            background: #6366f1;
-            border: none;
-            border-radius: 14px;
+        .input-group input:focus { outline: none; border-color: #667eea; }
+        .input-group button {
+            padding: 12px 24px;
+            background: #667eea;
             color: white;
-            font-weight: 600;
+            border: none;
+            border-radius: 10px;
+            font-weight: 500;
             cursor: pointer;
         }
         
-        .config-section {
-            margin-bottom: 24px;
-        }
-        .config-section label {
-            display: block;
-            color: #a1a1aa;
-            margin-bottom: 8px;
-            font-size: 14px;
-        }
-        .config-section input {
-            width: 100%;
-            padding: 14px 18px;
-            background: rgba(0,0,0,0.3);
-            border: 1px solid rgba(255,255,255,0.2);
-            border-radius: 14px;
-            color: white;
-            font-size: 14px;
-            margin-bottom: 16px;
-        }
-        
-        .output-console {
-            background: #0a0a0f;
-            border-radius: 16px;
-            padding: 20px;
-            color: #4ade80;
+        .output {
+            background: #1e1e2e;
+            color: #a6e3a1;
+            padding: 16px;
+            border-radius: 10px;
             font-family: 'Monaco', 'Menlo', monospace;
             font-size: 13px;
             min-height: 200px;
             max-height: 400px;
             overflow-y: auto;
             white-space: pre-wrap;
-            border: 1px solid rgba(255,255,255,0.1);
+            line-height: 1.5;
         }
         
         .toast {
             position: fixed;
-            bottom: 24px;
-            right: 24px;
-            background: #1e1b4b;
+            bottom: 20px;
+            right: 20px;
+            background: #333;
             color: white;
-            padding: 14px 24px;
+            padding: 12px 24px;
             border-radius: 50px;
             font-weight: 500;
-            animation: slide 0.3s;
+            animation: slideIn 0.3s;
             z-index: 1000;
-            border: 1px solid #6366f1;
         }
-        @keyframes slide { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+        @keyframes slideIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
         
         @media (max-width: 600px) {
             body { padding: 10px; }
-            .panel { padding: 18px; }
             .btn-grid { grid-template-columns: repeat(3, 1fr); }
+            .header h1 { font-size: 1.4rem; }
         }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>Phone Gateway</h1>
-            <p>Remote control with AI agent support</p>
+            <h1>Phone Gateway Controller v5</h1>
+            <p id="connectionInfo">Ready for connections...</p>
         </div>
-        
-        <nav>
-            <button class="nav-btn active" data-page="control">
-                <svg viewBox="0 0 24 24"><path d="M4 6h16v2H4V6zm0 5h16v2H4v-2zm0 5h10v2H4v-2z"/></svg>
-                Control
-            </button>
-            <button class="nav-btn" data-page="agent">
-                <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
-                AI Agent
-            </button>
-            <button class="nav-btn" data-page="settings">
-                <svg viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.33-.02-.64-.06-.94l2.02-1.58c.18-.14.23-.38.12-.56l-1.89-3.28c-.12-.19-.36-.26-.56-.18l-2.38.96c-.5-.38-1.06-.68-1.66-.88L14.45 3.5c-.04-.2-.2-.34-.4-.34h-3.78c-.2 0-.36.14-.4.34l-.3 2.52c-.6.2-1.16.5-1.66.88l-2.38-.96c-.2-.08-.44-.01-.56.18l-1.89 3.28c-.11.18-.06.42.12.56l2.02 1.58c-.04.3-.06.61-.06.94 0 .33.02.64.06.94l-2.02 1.58c-.18.14-.23.38-.12.56l1.89 3.28c.12.19.36.26.56.18l2.38-.96c.5.38 1.06.68 1.66.88l.3 2.52c.04.2.2.34.4.34h3.78c.2 0 .36-.14.4-.34l.3-2.52c.6-.2 1.16-.5 1.66-.88l2.38.96c.2.08.44.01.56-.18l1.89-3.28c.11-.18.06-.42-.12-.56l-2.02-1.58zM12 15c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3z"/></svg>
-                Settings
-            </button>
-        </nav>
         
         <div class="status-grid">
-            <div class="status-card"><h3>Status</h3><p id="connStatus" class="online">Online</p></div>
-            <div class="status-card"><h3>Device</h3><p id="deviceInfo">Loading...</p></div>
-            <div class="status-card"><h3>Battery</h3><p id="batteryLevel">--%</p></div>
+            <div class="stat-card"><div class="stat-label">Status</div><div class="stat-value online" id="status">Online</div></div>
+            <div class="stat-card"><div class="stat-label">Device</div><div class="stat-value" id="device" style="font-size:1rem;">Loading...</div></div>
+            <div class="stat-card"><div class="stat-label">Battery</div><div class="stat-value" id="battery">--%</div></div>
+            <div class="stat-card"><div class="stat-label">Clients</div><div class="stat-value" id="clients">0</div></div>
         </div>
         
-        <div id="controlPage" class="page active">
-            <div class="panel">
-                <h2><svg viewBox="0 0 24 24"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>Quick Actions</h2>
-                <div class="btn-grid">
-                    <button class="btn" onclick="execCmd('home')"><svg viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>Home</button>
-                    <button class="btn" onclick="execCmd('back')"><svg viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>Back</button>
-                    <button class="btn" onclick="execCmd('recent')"><svg viewBox="0 0 24 24"><path d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z"/></svg>Recent</button>
-                    <button class="btn" onclick="execCmd('power')"><svg viewBox="0 0 24 24"><path d="M13 3h-2v10h2V3zm4.83 2.17l-1.42 1.42C17.99 7.86 19 9.81 19 12c0 3.87-3.13 7-7 7s-7-3.13-7-7c0-2.19 1.01-4.14 2.59-5.42L6.17 5.17C4.23 6.82 3 9.26 3 12c0 4.97 4.03 9 9 9s9-4.03 9-9c0-2.74-1.23-5.18-3.17-6.83z"/></svg>Power</button>
-                    <button class="btn" onclick="execCmd('volup')"><svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/></svg>Vol+</button>
-                    <button class="btn" onclick="execCmd('voldown')"><svg viewBox="0 0 24 24"><path d="M18.5 12c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM5 9v6h4l5 5V4L9 9H5z"/></svg>Vol-</button>
-                    <button class="btn" onclick="execCmd('screenshot')"><svg viewBox="0 0 24 24"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>Screen</button>
-                    <button class="btn" onclick="execCmd('wifi_on')"><svg viewBox="0 0 24 24"><path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.03 2.97 7.97 2.97 1 9zm8 8l3 3 3-3c-1.66-1.66-4.34-1.66-6 0zm-4-4l2 2c2.76-2.76 7.24-2.76 10 0l2-2C15.07 9.07 8.93 9.07 5 13z"/></svg>WiFi ON</button>
-                    <button class="btn" onclick="execCmd('flashlight_on')"><svg viewBox="0 0 24 24"><path d="M20 4h-4L9 2 2 6v12l7 4 7-2h4c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2z"/></svg>Flash</button>
-                </div>
-            </div>
-            
-            <div class="panel">
-                <h2><svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14H6v-2h6v2zm3-4H6v-2h9v2zm3-4H6V7h12v2z"/></svg>Custom Commands</h2>
-                <div class="input-row">
-                    <input type="text" id="tapX" placeholder="X coord">
-                    <input type="text" id="tapY" placeholder="Y coord">
-                    <button onclick="execTap()">Tap</button>
-                </div>
-                <div class="input-row">
-                    <input type="text" id="textInput" placeholder="Text to type...">
-                    <button onclick="execText()">Type</button>
-                </div>
-                <div class="input-row">
-                    <input type="text" id="urlInput" placeholder="URL or app package...">
-                    <button onclick="execUrl()">Open</button>
-                </div>
-                <div class="input-row">
-                    <input type="text" id="shellInput" placeholder="Custom shell command...">
-                    <button onclick="execShell()">Execute</button>
-                </div>
-            </div>
-        </div>
-        
-        <div id="agentPage" class="page">
-            <div class="panel">
-                <h2><svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>AI Phone Agent</h2>
-                <p style="color:#a1a1aa; margin-bottom:20px;">Describe what you want the agent to do</p>
-                <div class="input-row">
-                    <input type="text" id="agentTask" placeholder="e.g., Open YouTube and search for music" style="flex:3;">
-                    <button onclick="runAgent()">Run Agent</button>
-                </div>
-                <label style="display:flex; align-items:center; gap:10px; color:#a1a1aa; margin-top:12px;">
-                    <input type="checkbox" id="telegramNotify"> Send progress to Telegram
-                </label>
-            </div>
-        </div>
-        
-        <div id="settingsPage" class="page">
-            <div class="panel">
-                <h2><svg viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.33-.02-.64-.06-.94l2.02-1.58c.18-.14.23-.38.12-.56l-1.89-3.28c-.12-.19-.36-.26-.56-.18l-2.38.96c-.5-.38-1.06-.68-1.66-.88L14.45 3.5c-.04-.2-.2-.34-.4-.34h-3.78c-.2 0-.36.14-.4.34l-.3 2.52c-.6.2-1.16.5-1.66.88l-2.38-.96c-.2-.08-.44-.01-.56.18l-1.89 3.28c-.11.18-.06.42.12.56l2.02 1.58c-.04.3-.06.61-.06.94 0 .33.02.64.06.94l-2.02 1.58c-.18.14-.23.38-.12.56l1.89 3.28c.12.19.36.26.56.18l2.38-.96c.5.38 1.06.68 1.66.88l.3 2.52c.04.2.2.34.4.34h3.78c.2 0 .36-.14.4-.34l.3-2.52c.6-.2 1.16-.5 1.66-.88l2.38.96c.2.08.44.01.56-.18l1.89-3.28c.11-.18.06-.42-.12-.56l-2.02-1.58zM12 15c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3z"/></svg>Configuration</h2>
-                <div class="config-section">
-                    <label>Gemini API Key</label>
-                    <input type="password" id="geminiKey" placeholder="AIza...">
-                </div>
-                <div class="config-section">
-                    <label>Telegram Bot Token</label>
-                    <input type="password" id="telegramToken" placeholder="123456:ABC...">
-                </div>
-                <div class="config-section">
-                    <label>Telegram Chat ID</label>
-                    <input type="text" id="telegramChatId" placeholder="123456789">
-                </div>
-                <button class="btn" style="width:100%; padding:16px;" onclick="saveConfig()">Save Configuration</button>
+        <div class="panel">
+            <h2>Quick Controls</h2>
+            <div class="btn-grid">
+                <button class="btn" onclick="exec('home')">Home</button>
+                <button class="btn" onclick="exec('back')">Back</button>
+                <button class="btn" onclick="exec('recent')">Recent</button>
+                <button class="btn" onclick="exec('power')">Power</button>
+                <button class="btn" onclick="exec('volup')">Vol+</button>
+                <button class="btn" onclick="exec('voldown')">Vol-</button>
+                <button class="btn" onclick="exec('wifi_on')">WiFi ON</button>
+                <button class="btn" onclick="exec('wifi_off')">WiFi OFF</button>
+                <button class="btn" onclick="exec('flashlight_on')">Flash ON</button>
+                <button class="btn" onclick="exec('flashlight_off')">Flash OFF</button>
+                <button class="btn" onclick="exec('screenshot')">Screenshot</button>
+                <button class="btn" onclick="exec('battery')">Battery</button>
             </div>
         </div>
         
         <div class="panel">
-            <h2><svg viewBox="0 0 24 24"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4V6h16v12z"/></svg>Console Output</h2>
-            <div class="output-console" id="console">Ready...</div>
+            <h2>Custom Commands</h2>
+            <div class="input-group">
+                <input type="text" id="tapX" placeholder="X">
+                <input type="text" id="tapY" placeholder="Y">
+                <button onclick="execTap()">Tap</button>
+            </div>
+            <div class="input-group">
+                <input type="text" id="textInput" placeholder="Text to type...">
+                <button onclick="execText()">Type</button>
+            </div>
+            <div class="input-group">
+                <input type="text" id="urlInput" placeholder="URL or app package">
+                <button onclick="execUrl()">Open</button>
+            </div>
+            <div class="input-group">
+                <input type="text" id="shellInput" placeholder="Shell command">
+                <button onclick="execShell()">Execute</button>
+            </div>
+        </div>
+        
+        <div class="panel">
+            <h2>Console Output</h2>
+            <div class="output" id="output">Gateway ready. Waiting for commands...</div>
         </div>
     </div>
     
     <script>
-        const consoleEl = document.getElementById('console');
-        let currentConfig = {};
+        const output = document.getElementById('output');
+        const statusEl = document.getElementById('status');
         
-        function log(msg) { consoleEl.textContent = msg + '\\n' + consoleEl.textContent; }
-        function toast(msg) {
-            const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg;
-            document.body.appendChild(t); setTimeout(() => t.remove(), 3000);
+        function log(msg) {
+            const time = new Date().toLocaleTimeString();
+            output.textContent = `[${time}] ${msg}\n` + output.textContent;
         }
         
-        async function execCmd(cmd, args = '') {
+        function toast(msg) {
+            const t = document.createElement('div');
+            t.className = 'toast';
+            t.textContent = msg;
+            document.body.appendChild(t);
+            setTimeout(() => t.remove(), 3000);
+        }
+        
+        async function exec(cmd, args = '') {
             try {
                 const res = await fetch('/api/command', {
-                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({cmd, args})
                 });
                 const data = await res.json();
-                log(`> ${cmd} ${args}\\n${data.result}`);
+                log(`> ${cmd} ${args}\n  ${data.result}`);
                 toast(`${cmd} executed`);
-            } catch(e) { log(`Error: ${e.message}`); }
+            } catch(e) {
+                log(`Error: ${e.message}`);
+                statusEl.textContent = 'Offline';
+                statusEl.className = 'stat-value offline';
+            }
         }
         
         function execTap() {
-            const x = document.getElementById('tapX').value, y = document.getElementById('tapY').value;
-            if(x && y) execCmd('tap', `${x} ${y}`);
-        }
-        function execText() {
-            const t = document.getElementById('textInput').value;
-            if(t) execCmd('text', t);
-        }
-        function execUrl() {
-            const u = document.getElementById('urlInput').value;
-            if(u) execCmd(u.includes('://') ? 'openurl' : 'openapp', u);
-        }
-        function execShell() {
-            const s = document.getElementById('shellInput').value;
-            if(s) execCmd('shell', `"${s}"`);
+            const x = document.getElementById('tapX').value;
+            const y = document.getElementById('tapY').value;
+            if(x && y) exec('tap', `${x} ${y}`);
         }
         
-        async function runAgent() {
-            const task = document.getElementById('agentTask').value;
-            const notify = document.getElementById('telegramNotify').checked;
-            if(!task) return;
-            log(`Starting AI Agent: ${task}`);
-            let cmd = `agent "${task}"`;
-            if(notify) cmd = `agent --notify "${task}"`;
-            execCmd('shell', `"python3 ~/phonegate/scripts/phone_agent.py ${notify ? '--notify ' : ''}\\${task}\\""`);
+        function execText() {
+            const t = document.getElementById('textInput').value;
+            if(t) exec('text', t);
+        }
+        
+        function execUrl() {
+            const u = document.getElementById('urlInput').value;
+            if(u) exec(u.includes('://') ? 'openurl' : 'openapp', u);
+        }
+        
+        function execShell() {
+            const s = document.getElementById('shellInput').value;
+            if(s) exec('shell', `"${s}"`);
         }
         
         async function loadStatus() {
             try {
                 const res = await fetch('/api/status');
                 const data = await res.json();
-                document.getElementById('connStatus').className = 'online';
-                document.getElementById('connStatus').textContent = 'Online';
-                const info = data.info.split('\\n');
-                document.getElementById('deviceInfo').textContent = info[0] || 'Android';
-                const level = data.battery.match(/level: (\\d+)/);
-                document.getElementById('batteryLevel').textContent = level ? level[1] + '%' : '--';
+                
+                statusEl.textContent = 'Online';
+                statusEl.className = 'stat-value online';
+                
+                const info = data.info.split('\n');
+                document.getElementById('device').textContent = info[0] || 'Android';
+                
+                const level = data.battery.match(/level:\s*(\d+)/);
+                document.getElementById('battery').textContent = level ? level[1] + '%' : '--%';
+                
+                document.getElementById('clients').textContent = data.connections || 0;
+                document.getElementById('connectionInfo').textContent = 
+                    `Server: ${data.serverIP}:3000 | Uptime: ${Math.floor(data.uptime/60)}m | Clients: ${data.connections}`;
             } catch(e) {
-                document.getElementById('connStatus').className = 'offline';
-                document.getElementById('connStatus').textContent = 'Offline';
+                statusEl.textContent = 'Offline';
+                statusEl.className = 'stat-value offline';
+                document.getElementById('connectionInfo').textContent = 'Connection lost. Retrying...';
             }
         }
         
-        async function loadConfig() {
-            try {
-                const res = await fetch('/api/config');
-                currentConfig = await res.json();
-                document.getElementById('geminiKey').value = currentConfig.gemini_api_key || '';
-                document.getElementById('telegramToken').value = currentConfig.telegram_bot_token || '';
-                document.getElementById('telegramChatId').value = currentConfig.telegram_chat_id || '';
-            } catch(e) {}
-        }
-        
-        async function saveConfig() {
-            const config = {
-                gemini_api_key: document.getElementById('geminiKey').value,
-                telegram_bot_token: document.getElementById('telegramToken').value,
-                telegram_chat_id: document.getElementById('telegramChatId').value,
-                telegram_enabled: true
-            };
-            await fetch('/api/config', {
-                method: 'POST',
-                body: JSON.stringify(config)
-            });
-            toast('Configuration saved');
-        }
-        
-        document.querySelectorAll('.nav-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-                document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-                btn.classList.add('active');
-                document.getElementById(btn.dataset.page + 'Page').classList.add('active');
-            });
-        });
-        
-        loadStatus(); loadConfig();
-        setInterval(loadStatus, 5000);
+        loadStatus();
+        setInterval(loadStatus, 3000);
     </script>
 </body>
 </html>
 HTML
 echo ""
 
-echo "[8/8] Creating start script..."
+echo "[7/7] Creating start script..."
 cat > ~/phonegate/start.sh << 'START'
 #!/data/data/com.termux/files/usr/bin/bash
 cd ~/phonegate
-echo ""
-echo "Detecting network..."
-IP=$(ip addr show wlan0 2>/dev/null | grep 'inet ' | awk '{print $2}' | cut -d/ -f1)
-[ -z "$IP" ] && IP=$(ip addr show ap0 2>/dev/null | grep 'inet ' | awk '{print $2}' | cut -d/ -f1)
-[ -z "$IP" ] && IP=$(ip route get 1 2>/dev/null | grep -oP 'src \K\S+')
-[ -z "$IP" ] && IP="192.168.43.1"
-echo "Gateway URL: http://${IP}:3000"
+echo "Starting Phone Gateway v5..."
 echo ""
 mkdir -p ~/.phonegate
-node server.js
+exec node server.js
 START
 chmod +x ~/phonegate/start.sh
 
+echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "                             INSTALLATION COMPLETE"
+echo "                         ✅ INSTALLATION COMPLETE v5"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
-echo "SETUP STEPS:"
+echo "QUICK START:"
 echo ""
 echo "1. Export Shizuku files:"
-echo "   • Open Shizuku app"
-echo "   • Tap 'Use Shizuku in terminal apps' → 'Export files'"
+echo "   Open Shizuku → Use Shizuku in terminal apps → Export files"
 echo ""
 echo "2. Start gateway:"
 echo "   cd ~/phonegate && ./start.sh"
 echo ""
-echo "3. Configure in Web UI:"
-echo "   • Open Settings tab"
-echo "   • Add Gemini API key"
-echo "   • Add Telegram bot token (optional)"
+echo "3. Connect other devices:"
+echo "   Enable hotspot on this phone"
+echo "   Connect other devices to hotspot"
+echo "   Open displayed URL in browser"
 echo ""
-echo "4. Connect other devices to hotspot and open the URL"
+echo "📊 CONNECTION LOGS:"
+echo "   • Shows when devices connect/disconnect"
+echo "   • Shows every command executed"
+echo "   • Shows active clients every 30 seconds"
+echo "   • Multiple URLs displayed for different network interfaces"
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
